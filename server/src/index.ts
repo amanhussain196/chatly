@@ -14,7 +14,7 @@ const io = new Server(server, {
     }
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // State management (Keep it in memory for now as per requirements)
 interface User {

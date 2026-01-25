@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = 'http://192.168.0.171:3001';
+const SOCKET_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
 interface SocketContextProps {
     socket: Socket | null;

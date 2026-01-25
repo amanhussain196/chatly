@@ -25,8 +25,9 @@ const Home = () => {
         if (socket) {
             // Use authenticated username if available, else local state (though we guard access now)
             const nameToUse = user ? user.username : username;
+            const idToUse = user ? user.id : undefined;
 
-            socket.emit('create_room', { username: nameToUse, isPrivate: true });
+            socket.emit('create_room', { username: nameToUse, userId: idToUse, isPrivate: true });
             socket.once('room_created', ({ roomId }) => {
                 navigate(`/room/${roomId}`, { state: { username: nameToUse } });
             });
@@ -35,12 +36,14 @@ const Home = () => {
 
     const handleJoinRoom = () => {
         const nameToUse = user ? user.username : username;
+        const idToUse = user ? user.id : undefined;
+
         if (roomCode.length < 6) {
             setError('Invalid Room Code');
             return;
         }
         if (socket) {
-            socket.emit('join_room', { username: nameToUse, roomId: roomCode });
+            socket.emit('join_room', { username: nameToUse, userId: idToUse, roomId: roomCode });
             socket.once('room_joined', ({ roomId }) => {
                 navigate(`/room/${roomId}`, { state: { username: nameToUse } });
             });
@@ -66,7 +69,7 @@ const Home = () => {
                         {user.id?.startsWith('guest-') ? (
                             <span title="Guest User">❓</span>
                         ) : (
-                            <span title="Registered User">🔵</span>
+                            <span title="Registered User">✅</span>
                         )}
                     </p>
                 )}

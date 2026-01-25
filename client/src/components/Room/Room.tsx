@@ -10,11 +10,14 @@ import { Mic, MicOff, Send, PhoneOff, Copy, User as UserIcon, MessageSquare } fr
 
 
 interface User {
-    id: string;
+    id: string; // Socket ID
+    userId?: string; // Auth ID
     username: string;
     isHost: boolean;
     isMuted: boolean;
 }
+
+
 
 interface Message {
     id: string;
@@ -236,10 +239,10 @@ const Room = () => {
                                         <div>
                                             <p style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                 {u.username}
-                                                {u.id?.startsWith('guest-') ? (
-                                                    <span title="Guest User">❓</span>
+                                                {u.userId && !u.userId.startsWith('guest-') ? (
+                                                    <span title="Registered User">✅</span>
                                                 ) : (
-                                                    <span title="Registered User">🔵</span>
+                                                    <span title="Guest User">❓</span>
                                                 )}
                                                 {u.id === currentUser.id && '(You)'}
                                             </p>

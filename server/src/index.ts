@@ -37,6 +37,7 @@ const PORT = process.env.PORT || 3001;
 // State management (Keep it in memory for now as per requirements)
 interface User {
     id: string;
+    userId?: string; // Auth ID or Guest ID
     username: string;
     roomId?: string;
     isHost: boolean;
@@ -59,11 +60,12 @@ const users: Record<string, User> = {};
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    socket.on('create_room', ({ username, isPrivate }) => {
+    socket.on('create_room', ({ username, userId, isPrivate }) => {
         const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
 
         const newUser: User = {
             id: socket.id,
+            userId,
             username,
             roomId,
             isHost: true,
@@ -86,7 +88,7 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('room_users_update', rooms[roomId].users);
     });
 
-    socket.on('join_room', ({ username, roomId }) => {
+    socket.on('join_room', ({ username, userId, roomId }) => {
         const room = rooms[roomId.toUpperCase()];
 
         if (!room) {
@@ -101,6 +103,7 @@ io.on('connection', (socket) => {
 
         const newUser: User = {
             id: socket.id,
+            userId, // Store the auth ID
             username,
             roomId: room.id,
             isHost: false,

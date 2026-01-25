@@ -1,0 +1,55 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Install Dependencies
+        run: |
+          cd client
+          npm ci
+
+      - name: Build Web App
+        env:
+          VITE_SERVER_URL: https://chatly-xz91.onrender.com
+        run: |
+          cd client
+          npm run build
+
+      - name: Sync Capacitor
+        run: |
+          cd client
+          npx cap sync
+
+      - name: Build APK
+        run: |
+          cd client/android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: chatly-debug.apk
+          path: client/android/app/build/outputs/apk/debug/app-debug.apk

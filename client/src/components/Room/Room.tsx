@@ -134,10 +134,25 @@ const Room = () => {
         alert('Room Code Copied: ' + roomId);
     };
 
+    const isDM = roomId?.startsWith('dm_');
+    const friendUsername = location.state?.friendUsername;
+
+    useEffect(() => {
+        if (isDM) setActiveTab('chat');
+    }, [isDM]);
+
     const leaveRoom = () => {
-        if (confirm('Are you sure you want to leave?')) {
+        if (isDM) {
             navigate('/');
+            // window.location.reload(); // Not needed for DM simple back? 
+            // Ideally we leave the room socket-wise too, but keeping it optional is okay. 
+            // To be clean:
             window.location.reload();
+        } else {
+            if (confirm('Are you sure you want to leave?')) {
+                navigate('/');
+                window.location.reload();
+            }
         }
     };
 
@@ -148,35 +163,49 @@ const Room = () => {
             {/* Header */}
             <div style={{ padding: '16px', background: 'var(--bg-card)', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                    <h2 style={{ fontSize: '1.2rem', fontWeight: '700' }}>Room: <span style={{ fontFamily: 'monospace', color: 'var(--primary)', cursor: 'pointer' }} onClick={copyRoomCode}>{roomId} <Copy size={14} style={{ display: 'inline' }} /></span></h2>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{users.length} Online</span>
+                    {isDM ? (
+                        <h2 style={{ fontSize: '1.2rem', fontWeight: '700' }}>{friendUsername ? `Chat with ${friendUsername}` : 'Private Chat'}</h2>
+                    ) : (
+                        <div>
+                            <h2 style={{ fontSize: '1.2rem', fontWeight: '700' }}>Room: <span style={{ fontFamily: 'monospace', color: 'var(--primary)', cursor: 'pointer' }} onClick={copyRoomCode}>{roomId} <Copy size={14} style={{ display: 'inline' }} /></span></h2>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{users.length} Online</span>
+                        </div>
+                    )}
                 </div>
-                <button onClick={leaveRoom} style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '8px', borderRadius: '50%' }}>
-                    <PhoneOff size={20} />
-                </button>
+                {isDM ? (
+                    <button onClick={leaveRoom} style={{ background: 'transparent', color: 'var(--text-muted)', padding: '8px', borderRadius: '50%' }}>
+                        <span style={{ fontSize: '1.2rem' }}>←</span>
+                    </button>
+                ) : (
+                    <button onClick={leaveRoom} style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '8px', borderRadius: '50%' }}>
+                        <PhoneOff size={20} />
+                    </button>
+                )}
             </div>
 
-            {/* Tabs */}
-            <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <button
-                    style={{ flex: 1, padding: '12px', background: 'transparent', color: activeTab === 'chat' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'chat' ? '2px solid var(--primary)' : 'none' }}
-                    onClick={() => setActiveTab('chat')}
-                >
-                    Chat
-                </button>
-                <button
-                    style={{ flex: 1, padding: '12px', background: 'transparent', color: activeTab === 'people' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'people' ? '2px solid var(--primary)' : 'none' }}
-                    onClick={() => setActiveTab('people')}
-                >
-                    People
-                </button>
-                <button
-                    style={{ padding: '12px', background: 'transparent', color: showLogs ? 'var(--accent)' : 'var(--text-muted)' }}
-                    onClick={() => setShowLogs(!showLogs)}
-                >
-                    Logs
-                </button>
-            </div>
+            {/* Tabs (Hidden for DM) */}
+            {!isDM && (
+                <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <button
+                        style={{ flex: 1, padding: '12px', background: 'transparent', color: activeTab === 'chat' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'chat' ? '2px solid var(--primary)' : 'none' }}
+                        onClick={() => setActiveTab('chat')}
+                    >
+                        Chat
+                    </button>
+                    <button
+                        style={{ flex: 1, padding: '12px', background: 'transparent', color: activeTab === 'people' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'people' ? '2px solid var(--primary)' : 'none' }}
+                        onClick={() => setActiveTab('people')}
+                    >
+                        People
+                    </button>
+                    <button
+                        style={{ padding: '12px', background: 'transparent', color: showLogs ? 'var(--accent)' : 'var(--text-muted)' }}
+                        onClick={() => setShowLogs(!showLogs)}
+                    >
+                        Logs
+                    </button>
+                </div>
+            )}
 
             {/* Content */}
             <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>

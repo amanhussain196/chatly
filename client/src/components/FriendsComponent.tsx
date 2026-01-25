@@ -32,7 +32,7 @@ const FriendsComponent = () => {
 
     // ... existing functions ...
 
-    const startChat = (friendId: string) => {
+    const startChat = (friendId: string, friendUsername: string) => {
         if (!user || !user.id || !friendId || !socket) return;
 
         // Deterministic Room ID for 1-to-1 chat
@@ -43,7 +43,7 @@ const FriendsComponent = () => {
         socket.emit('join_room', { username: user.username, userId: user.id, roomId });
 
         socket.once('room_joined', () => {
-            navigate(`/room/${roomId}`, { state: { username: user.username } });
+            navigate(`/room/${roomId}`, { state: { username: user.username, friendUsername } });
         });
 
         // Fallback just in case, though Room.tsx handles some logic, it's safer here.
@@ -182,7 +182,7 @@ const FriendsComponent = () => {
                                             </div>
                                             <span>{friend.username}</span>
                                         </div>
-                                        <button onClick={() => startChat(friend._id)} style={{ padding: '8px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', color: 'var(--primary)', cursor: 'pointer' }} title="Message">
+                                        <button onClick={() => startChat(friend._id, friend.username)} style={{ padding: '8px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', color: 'var(--primary)', cursor: 'pointer' }} title="Message">
                                             <MessageSquare size={18} />
                                         </button>
                                     </div>

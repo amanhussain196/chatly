@@ -1,11 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Home from './components/Home';
-import Room from './components/Room/Room';
-import AuthPage from './components/AuthPage';
-import { SocketProvider } from './context/SocketContext';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { ReactNode } from 'react';
+// ... imports
 
-function PrivateRoute({ children }: { children: JSX.Element }) {
+function PrivateRoute({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) return <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading...</div>;

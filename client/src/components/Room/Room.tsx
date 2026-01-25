@@ -236,7 +236,7 @@ const Room = () => {
                                         <div>
                                             <p style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                 {u.username}
-                                                {u.id.startsWith('guest-') ? (
+                                                {u.id?.startsWith('guest-') ? (
                                                     <span title="Guest User">❓</span>
                                                 ) : (
                                                     <span title="Registered User">🔵</span>

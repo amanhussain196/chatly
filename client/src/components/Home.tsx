@@ -63,7 +63,7 @@ const Home = () => {
                 {user && (
                     <p style={{ color: 'var(--accent)', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                         Welcome, <b>{user.username}</b>
-                        {user.id.startsWith('guest-') ? (
+                        {user.id?.startsWith('guest-') ? (
                             <span title="Guest User">❓</span>
                         ) : (
                             <span title="Registered User">🔵</span>

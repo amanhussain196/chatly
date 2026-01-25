@@ -106,7 +106,7 @@ router.get('/me', async (req, res) => {
             return;
         }
 
-        res.json({ user });
+        res.json({ user: { id: user._id, username: user.username, email: user.email } });
     } catch (err) {
         res.status(401).json({ message: 'Invalid token' });
     }

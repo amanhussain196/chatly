@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { UserPlus, Check, X, MessageSquare, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext'; // Added
 import { useNavigate } from 'react-router-dom';
 
 const API_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
@@ -14,6 +15,7 @@ interface Friend {
 
 const FriendsComponent = () => {
     const { token, user } = useAuth(); // Need token for requests
+    const { socket } = useSocket(); // Added
     const navigate = useNavigate();
     const [view, setView] = useState<'list' | 'add'>('list');
     const [friends, setFriends] = useState<Friend[]>([]);
@@ -27,6 +29,28 @@ const FriendsComponent = () => {
             fetchFriends();
         }
     }, [token]);
+
+    // ... existing functions ...
+
+    const startChat = (friendId: string) => {
+        if (!user || !user.id || !friendId || !socket) return;
+
+        // Deterministic Room ID for 1-to-1 chat
+        const ids = [user.id, friendId].sort();
+        const roomId = `dm_${ids[0]}_${ids[1]}`;
+
+        // Join room before navigating to ensure existence
+        socket.emit('join_room', { username: user.username, userId: user.id, roomId });
+
+        socket.once('room_joined', () => {
+            navigate(`/room/${roomId}`, { state: { username: user.username } });
+        });
+
+        // Fallback just in case, though Room.tsx handles some logic, it's safer here.
+        // Actually, if we rely on Room.tsx to auto-join, we duplicate. 
+        // But Room.tsx generally expects to have joined if passed via normal flow.
+        // Let's rely on this explicit join.
+    };
 
     const fetchFriends = async () => {
         try {
@@ -71,16 +95,7 @@ const FriendsComponent = () => {
         }
     };
 
-    const startChat = (friendId: string) => {
-        if (!user || !user.id || !friendId) return;
 
-        // Deterministic Room ID for 1-to-1 chat
-        // Sort IDs to ensure both users generate the same room ID
-        const ids = [user.id, friendId].sort();
-        const roomId = `dm_${ids[0]}_${ids[1]}`;
-
-        navigate(`/room/${roomId}`, { state: { username: user.username } });
-    };
 
     return (
         <div className="card" style={{ padding: '20px', marginTop: '20px' }}>

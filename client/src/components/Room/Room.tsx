@@ -17,13 +17,12 @@ interface User {
     isMuted: boolean;
 }
 
-
-
 interface Message {
     id: string;
     text: string;
     sender: string;
     timestamp: string;
+    status?: 'sent' | 'delivered' | 'read';
 }
 
 const Room = () => {
@@ -37,6 +36,7 @@ const Room = () => {
     const [newMessage, setNewMessage] = useState('');
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [activeTab, setActiveTab] = useState<'chat' | 'people'>('chat');
+    const [showLogs, setShowLogs] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -53,15 +53,10 @@ const Room = () => {
             return;
         }
 
-        // Join room logic here if not already joined by Home? 
-        // actually Home emits 'create_room' or 'join_room' then navigates. 
-        // But if we refresh /room/ID, we need to rejoin.
-        // For now, let's just assume the flow from Home. 
-        // If direct access, we might need to emit 'join_room' again.
-        if (user && !location.state?.username) {
-            socket.emit('join_room', { username: user.username, roomId });
+        // Always attempt to join if we are here (idempotent on server mostly, but critical for direct link or refresh)
+        if (roomId) {
+            socket.emit('join_room', { username: effectiveUsername, userId: user?.id, roomId });
         }
-
 
         // Request initial state in case we missed the update
         socket.emit('get_room_state', { roomId });
@@ -72,8 +67,25 @@ const Room = () => {
             if (me) setCurrentUser(me);
         });
 
+        socket.on('message_history', (history: Message[]) => {
+            setMessages(history);
+            // Mark all as read if from others
+            if (history.length > 0) {
+                // simplified read marking for now
+            }
+        });
+
         socket.on('receive_message', (message: Message) => {
             setMessages(prev => [...prev, message]);
+
+            // Mark read if it's not from me
+            if (message.sender !== effectiveUsername) {
+                socket.emit('mark_read', { messageId: message.id, roomId });
+            }
+        });
+
+        socket.on('message_status_update', ({ id, status }: { id: string, status: 'read' }) => {
+            setMessages(prev => prev.map(msg => msg.id === id ? { ...msg, status } : msg));
         });
 
         socket.on('user_joined', ({ username }) => {
@@ -89,8 +101,10 @@ const Room = () => {
             socket.off('receive_message');
             socket.off('user_joined');
             socket.off('user_left');
+            socket.off('message_history');
+            socket.off('message_status_update');
         };
-    }, [socket, roomId, location.state, navigate]);
+    }, [socket, roomId, location.state, navigate, user]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -98,7 +112,6 @@ const Room = () => {
 
     // WebRTC
     const { peers, toggleMute: toggleAudioMute, stream, logs } = useWebRTC(socket, roomId || '', currentUser?.id || '');
-    const [showLogs, setShowLogs] = useState(false);
 
     const sendMessage = (e: React.FormEvent) => {
         e.preventDefault();
@@ -118,14 +131,13 @@ const Room = () => {
 
     const copyRoomCode = () => {
         navigator.clipboard.writeText(roomId || '');
-        // Could add a toast notification here
         alert('Room Code Copied: ' + roomId);
     };
 
     const leaveRoom = () => {
         if (confirm('Are you sure you want to leave?')) {
             navigate('/');
-            window.location.reload(); // Simple way to reset socket state cleanly
+            window.location.reload();
         }
     };
 
@@ -190,10 +202,24 @@ const Room = () => {
                                                 padding: '10px 14px',
                                                 borderRadius: '18px',
                                                 borderTopRightRadius: msg.sender === currentUser.username ? '4px' : '18px',
-                                                borderTopLeftRadius: msg.sender !== currentUser.username ? '4px' : '18px'
+                                                borderTopLeftRadius: msg.sender !== currentUser.username ? '4px' : '18px',
+                                                position: 'relative',
+                                                paddingBottom: '20px' // Make room for tick
                                             }}>
                                                 {msg.text}
+                                                {msg.sender === currentUser.username && (
+                                                    <span style={{ position: 'absolute', bottom: '4px', right: '8px', fontSize: '0.6rem' }}>
+                                                        {msg.status === 'read' ? '✓✓' : '✓'}
+                                                    </span>
+                                                )}
                                             </div>
+                                            {msg.sender === currentUser.username && (
+                                                <style>
+                                                    {`
+                                                        span[title="Read"] { color: #4ade80; }
+                                                    `}
+                                                </style>
+                                            )}
                                         </div>
                                     )}
                                 </div>

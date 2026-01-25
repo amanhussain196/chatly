@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import friendRoutes from './routes/friends';
+import { Message } from './models/Message';
 
 dotenv.config();
 
@@ -90,7 +91,9 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('room_users_update', rooms[roomId].users);
     });
 
-    socket.on('join_room', ({ username, userId, roomId }) => {
+
+
+    socket.on('join_room', async ({ username, userId, roomId }) => {
         let room = rooms[roomId.toUpperCase()];
 
         // Auto-create DM rooms if they don't exist
@@ -118,7 +121,6 @@ io.on('connection', (socket) => {
             // Mongo IDs are lower case usually. 
             // Let's just use roomId as is for the ID property, but store in map with Upper Key to match lookup?
             // "dm_abc_123".toUpperCase() -> "DM_ABC_123". 
-            // Client logic: `dm_${ids[0]}_${ids[1]}`. 
             // As long as lookup `rooms[roomId.toUpperCase()]` finds it, we are good.
         }
 
@@ -130,6 +132,23 @@ io.on('connection', (socket) => {
         if (room.users.length >= room.settings.maxPlayers) {
             socket.emit('error', 'Room is full');
             return;
+        }
+
+        // Fetch message history
+        try {
+            const history = await Message.find({ roomId })
+                .sort({ createdAt: 1 })
+                .limit(50);
+
+            socket.emit('message_history', history.map(msg => ({
+                id: msg._id.toString(),
+                text: msg.text,
+                sender: msg.senderUsername,
+                timestamp: msg.createdAt.toISOString(),
+                status: msg.status
+            })));
+        } catch (e) {
+            console.error(e);
         }
 
         const newUser: User = {
@@ -150,16 +169,40 @@ io.on('connection', (socket) => {
         io.to(room.id).emit('room_users_update', room.users);
     });
 
-    socket.on('send_message', ({ message, roomId }) => {
+    socket.on('send_message', async ({ message, roomId }) => {
         const user = users[socket.id];
         if (user && user.roomId === roomId) {
-            io.to(roomId).emit('receive_message', {
-                id: Math.random().toString(36).substr(2, 9),
+            const msgData = {
+                roomId,
+                senderId: user.userId || socket.id,
+                senderUsername: user.username,
                 text: message,
-                sender: user.username,
-                timestamp: new Date().toISOString()
-            });
+                status: 'sent'
+            };
+
+            try {
+                const newMsg = new Message(msgData);
+                await newMsg.save();
+
+                io.to(roomId).emit('receive_message', {
+                    id: newMsg._id.toString(),
+                    text: newMsg.text,
+                    sender: newMsg.senderUsername,
+                    timestamp: newMsg.createdAt.toISOString(),
+                    status: newMsg.status
+                });
+            } catch (e) {
+                console.error("Msg Save Error", e);
+            }
         }
+    });
+
+    socket.on('mark_read', async ({ messageId, roomId }) => {
+        // Update DB
+        try {
+            await Message.findByIdAndUpdate(messageId, { status: 'read' });
+            io.to(roomId).emit('message_status_update', { id: messageId, status: 'read' });
+        } catch (e) { }
     });
 
     socket.on('get_room_state', ({ roomId }) => {

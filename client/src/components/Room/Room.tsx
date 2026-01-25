@@ -5,6 +5,7 @@ import Audio from './Audio';
 import VoiceVisualizer from './VoiceVisualizer';
 
 import { useSocket } from '../../context/SocketContext';
+import { useAuth } from '../../context/AuthContext';
 import { Mic, MicOff, Send, PhoneOff, Copy, User as UserIcon, MessageSquare } from 'lucide-react';
 
 

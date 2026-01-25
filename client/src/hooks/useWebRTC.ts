@@ -113,6 +113,12 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
             initiator: true,
             trickle: false,
             stream,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
+                ]
+            }
         });
 
         peer.on('signal', (signal) => {
@@ -135,6 +141,12 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
             initiator: false,
             trickle: false,
             stream,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
+                ]
+            }
         });
 
         peer.on('signal', (signal) => {

@@ -6,13 +6,18 @@ const Audio = ({ peer, stream }: { peer?: SimplePeer.Instance, stream: MediaStre
     const ref = useRef<HTMLAudioElement>(null);
 
     useEffect(() => {
-        if (!stream && peer) {
-            // Fallback for legacy if needed, but we prefer props
-            peer.on("stream", (s) => {
-                if (ref.current) ref.current.srcObject = s;
-            });
-        } else if (stream && ref.current) {
-            ref.current.srcObject = stream;
+        if (ref.current) {
+            if (stream) {
+                ref.current.srcObject = stream;
+                ref.current.play().catch(e => console.error("Audio play failed:", e));
+            } else if (peer) {
+                peer.on("stream", (s) => {
+                    if (ref.current) {
+                        ref.current.srcObject = s;
+                        ref.current.play().catch(e => console.error("Audio play failed (peer event):", e));
+                    }
+                });
+            }
         }
     }, [stream, peer]);
 

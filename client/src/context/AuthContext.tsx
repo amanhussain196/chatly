@@ -52,7 +52,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
 
             // Check for guest if no logged in user
-            const guestUser = localStorage.getItem('guest_username');
+            const guestUser = sessionStorage.getItem('guest_username');
             if (!token && guestUser) {
                 setUser({
                     id: 'guest-' + Math.random().toString(36).substr(2, 9),
@@ -68,7 +68,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const login = (newToken: string, newUser: User) => {
         localStorage.setItem('token', newToken);
-        localStorage.removeItem('guest_username'); // Clear guest if logging in
+        sessionStorage.removeItem('guest_username'); // Clear guest if logging in
         setToken(newToken);
         setUser(newUser);
         axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
@@ -80,13 +80,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             username,
             email: ''
         };
-        localStorage.setItem('guest_username', username);
+        sessionStorage.setItem('guest_username', username);
         setUser(guestUser);
     };
 
     const logout = () => {
         localStorage.removeItem('token');
-        localStorage.removeItem('guest_username');
+        sessionStorage.removeItem('guest_username');
         setToken(null);
         setUser(null);
         delete axios.defaults.headers.common['Authorization'];

@@ -60,7 +60,16 @@ const Home = () => {
                     Connect & Play with Friends
                 </p>
 
-                {user && <p style={{ color: 'var(--accent)', marginBottom: '16px' }}>Welcome, <b>{user.username}</b></p>}
+                {user && (
+                    <p style={{ color: 'var(--accent)', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                        Welcome, <b>{user.username}</b>
+                        {user.id.startsWith('guest-') ? (
+                            <span title="Guest User">❓</span>
+                        ) : (
+                            <span title="Registered User">🔵</span>
+                        )}
+                    </p>
+                )}
 
                 {view === 'main' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

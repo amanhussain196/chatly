@@ -234,8 +234,14 @@ const Room = () => {
                                             <UserIcon size={20} />
                                         </div>
                                         <div>
-                                            <p style={{ fontWeight: '600' }}>
-                                                {u.username} {u.id === currentUser.id && '(You)'}
+                                            <p style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                {u.username}
+                                                {u.id.startsWith('guest-') ? (
+                                                    <span title="Guest User">❓</span>
+                                                ) : (
+                                                    <span title="Registered User">🔵</span>
+                                                )}
+                                                {u.id === currentUser.id && '(You)'}
                                             </p>
                                             <p style={{ fontSize: '0.8rem', color: u.isHost ? 'var(--accent)' : 'var(--text-muted)' }}>
                                                 {u.isHost ? 'Host' : 'Participant'}

@@ -37,6 +37,7 @@ const Room = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [activeTab, setActiveTab] = useState<'chat' | 'people'>('chat');
     const [showLogs, setShowLogs] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -53,15 +54,24 @@ const Room = () => {
             return;
         }
 
-        // Always attempt to join if we are here (idempotent on server mostly, but critical for direct link or refresh)
-        if (roomId) {
-            socket.emit('join_room', { username: effectiveUsername, userId: user?.id, roomId });
+        const joinRoom = () => {
+            if (roomId) {
+                console.log('Joining room:', roomId);
+                socket.emit('join_room', { username: effectiveUsername, userId: user?.id, roomId });
+            }
+        };
+
+        if (socket.connected) {
+            joinRoom();
+        } else {
+            socket.on('connect', joinRoom);
         }
 
         // Request initial state in case we missed the update
         socket.emit('get_room_state', { roomId });
 
         socket.on('room_users_update', (roomUsers: User[]) => {
+            console.log('Users updated:', roomUsers);
             setUsers(roomUsers);
             const me = roomUsers.find(u => u.id === socket.id);
             if (me) setCurrentUser(me);
@@ -96,13 +106,20 @@ const Room = () => {
             setMessages(prev => [...prev, { id: Date.now().toString(), text: `${username} left the room.`, sender: 'System', timestamp: new Date().toISOString() }]);
         });
 
+        socket.on('error', (msg: string) => {
+            console.error('Socket Error:', msg);
+            setError(msg);
+        });
+
         return () => {
+            socket.off('connect', joinRoom);
             socket.off('room_users_update');
             socket.off('receive_message');
             socket.off('user_joined');
             socket.off('user_left');
             socket.off('message_history');
             socket.off('message_status_update');
+            socket.off('error');
         };
     }, [socket, roomId, location.state, navigate, user]);
 
@@ -156,7 +173,22 @@ const Room = () => {
         }
     };
 
-    if (!currentUser) return <div className="container" style={{ justifyContent: 'center', alignItems: 'center' }}>Loading...</div>;
+    if (error) {
+        return (
+            <div className="container" style={{ justifyContent: 'center', alignItems: 'center', flexDirection: 'column', gap: '16px' }}>
+                <h2 style={{ color: 'var(--danger)' }}>Error</h2>
+                <p>{error}</p>
+                <button className="btn-secondary" onClick={() => navigate('/')}>Go Home</button>
+            </div>
+        );
+    }
+
+    if (!currentUser) return (
+        <div className="container" style={{ justifyContent: 'center', alignItems: 'center', flexDirection: 'column', gap: '8px' }}>
+            <p>Loading Room...</p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Waiting for server response...</p>
+        </div>
+    );
 
     return (
         <div className="container" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>

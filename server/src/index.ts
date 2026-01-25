@@ -2,9 +2,27 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+import authRoutes from './routes/auth';
+
+dotenv.config();
 
 const app = express();
 app.use(cors());
+app.use(express.json()); // Enable JSON body parsing
+
+// Check if MONGO_URI is set
+if (!process.env.MONGO_URI) {
+    console.warn("WARNING: MONGO_URI not set. Auth features will fail.");
+}
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/chatly')
+    .then(() => console.log('MongoDB Connected'))
+    .catch(err => console.error('MongoDB Connection Error:', err));
+
+app.use('/api/auth', authRoutes);
 
 const server = http.createServer(app);
 const io = new Server(server, {

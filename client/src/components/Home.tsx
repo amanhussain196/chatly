@@ -1,51 +1,50 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useNavigate } from 'react-router-dom';
 import { User, Plus, Users } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const Home = () => {
     const { socket } = useSocket();
     const navigate = useNavigate();
+    const { user, logout } = useAuth();
+
+    // Default username to auth user if available
     const [username, setUsername] = useState('');
     const [roomCode, setRoomCode] = useState('');
     const [error, setError] = useState('');
     const [view, setView] = useState<'main' | 'create' | 'join'>('main');
 
-    const validateUsername = () => {
-        if (username.length < 3 || username.length > 15) {
-            setError('Username must be 3-15 chars');
-            return false;
+    useEffect(() => {
+        if (user) {
+            setUsername(user.username);
         }
-        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-            setError('Alphanumeric & underscores only');
-            return false;
-        }
-        return true;
-    };
+    }, [user]);
 
     const handleCreateRoom = () => {
-        if (!validateUsername()) return;
         if (socket) {
-            socket.emit('create_room', { username, isPrivate: true });
-            // Listen for success in parent or here, but ideally we wait for event
+            // Use authenticated username if available, else local state (though we guard access now)
+            const nameToUse = user ? user.username : username;
+
+            socket.emit('create_room', { username: nameToUse, isPrivate: true });
             socket.once('room_created', ({ roomId }) => {
-                navigate(`/room/${roomId}`, { state: { username } });
+                navigate(`/room/${roomId}`, { state: { username: nameToUse } });
             });
         }
     };
 
     const handleJoinRoom = () => {
-        if (!validateUsername()) return;
+        const nameToUse = user ? user.username : username;
         if (roomCode.length < 6) {
             setError('Invalid Room Code');
             return;
         }
         if (socket) {
-            socket.emit('join_room', { username, roomId: roomCode });
+            socket.emit('join_room', { username: nameToUse, roomId: roomCode });
             socket.once('room_joined', ({ roomId }) => {
-                navigate(`/room/${roomId}`, { state: { username } });
+                navigate(`/room/${roomId}`, { state: { username: nameToUse } });
             });
-            socket.once('error', (msg) => {
+            socket.once('error', (msg: string) => {
                 setError(msg);
             });
         }
@@ -61,34 +60,28 @@ const Home = () => {
                     Connect & Play with Friends
                 </p>
 
+                {user && <p style={{ color: 'var(--accent)', marginBottom: '16px' }}>Welcome, <b>{user.username}</b></p>}
+
                 {view === 'main' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <div style={{ position: 'relative' }}>
-                            <User size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-                            <input
-                                className="input-field"
-                                style={{ paddingLeft: '48px' }}
-                                placeholder="Enter Username"
-                                value={username}
-                                onChange={(e) => { setUsername(e.target.value); setError(''); }}
-                            />
-                        </div>
+
                         {error && <p style={{ color: 'var(--danger)', fontSize: '0.875rem' }}>{error}</p>}
 
-                        <button className="btn-primary" onClick={() => { if (validateUsername()) setView('create'); }}>
+                        <button className="btn-primary" onClick={() => setView('create')}>
                             <Plus size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
                             Create Room
                         </button>
-                        <button className="btn-secondary" onClick={() => { if (validateUsername()) setView('join'); }}>
+                        <button className="btn-secondary" onClick={() => setView('join')}>
                             <Users size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
                             Join Room
                         </button>
+
+
                     </div>
                 )}
 
                 {view === 'create' && (
                     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <p style={{ fontSize: '1.1rem' }}>Hi, <b>{username}</b>!</p>
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Ready to host a game night?</p>
                         <button className="btn-primary" onClick={handleCreateRoom}>
                             Start New Room
@@ -101,7 +94,6 @@ const Home = () => {
 
                 {view === 'join' && (
                     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <p style={{ fontSize: '1.1rem' }}>Hi, <b>{username}</b>!</p>
                         <input
                             className="input-field"
                             placeholder="Enter Room Code"
@@ -116,6 +108,14 @@ const Home = () => {
                         </button>
                         <button className="btn-secondary" onClick={() => setView('main')} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)' }}>
                             Back
+                        </button>
+                    </div>
+                )}
+
+                {user && (
+                    <div style={{ marginTop: '24px' }}>
+                        <button onClick={logout} style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.9rem', textDecoration: 'underline' }}>
+                            Logout
                         </button>
                     </div>
                 )}

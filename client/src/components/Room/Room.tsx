@@ -36,14 +36,28 @@ const Room = () => {
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
+    const { user } = useAuth(); // Get user from context
+
     useEffect(() => {
         if (!socket) return;
 
-        // Safety check: if accessed directly without state, redirect to home
-        if (!location.state?.username) {
+        const effectiveUsername = user?.username || location.state?.username;
+
+        // Safety check: if accessed directly without state AND not logged in
+        if (!effectiveUsername) {
             navigate('/');
             return;
         }
+
+        // Join room logic here if not already joined by Home? 
+        // actually Home emits 'create_room' or 'join_room' then navigates. 
+        // But if we refresh /room/ID, we need to rejoin.
+        // For now, let's just assume the flow from Home. 
+        // If direct access, we might need to emit 'join_room' again.
+        if (user && !location.state?.username) {
+            socket.emit('join_room', { username: user.username, roomId });
+        }
+
 
         // Request initial state in case we missed the update
         socket.emit('get_room_state', { roomId });

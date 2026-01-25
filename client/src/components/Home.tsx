@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useNavigate } from 'react-router-dom';
-import { User, Plus, Users } from 'lucide-react';
+import { Plus, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Home = () => {

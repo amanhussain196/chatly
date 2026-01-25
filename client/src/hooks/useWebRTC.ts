@@ -65,15 +65,21 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
 
                     if (peersRef.current.find(p => p.peerID === payload.id)) return;
 
-                    const peer = createPeer(payload.id, socket.id!, stream);
-                    const peerObj: Peer = {
-                        peerID: payload.id,
-                        peer,
-                        stream: null,
-                        connectionState: 'connecting'
-                    };
-                    peersRef.current.push(peerObj);
-                    setPeers([...peersRef.current]);
+                    try {
+                        addLog(`Creating initiator peer for ${payload.id}`);
+                        const peer = createPeer(payload.id, socket.id!, stream);
+                        const peerObj: Peer = {
+                            peerID: payload.id,
+                            peer,
+                            stream: null,
+                            connectionState: 'connecting'
+                        };
+                        peersRef.current.push(peerObj);
+                        setPeers([...peersRef.current]);
+                    } catch (e: any) {
+                        addLog(`CRITICAL Error creating initiator peer: ${e.message}`);
+                        console.error(e);
+                    }
                 });
 
                 socket.on('signal', (payload: { senderId: string, signal: any }) => {

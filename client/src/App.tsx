@@ -1,5 +1,10 @@
-import { ReactNode } from 'react';
-// ... imports
+import { type ReactNode } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Home from './components/Home';
+import Room from './components/Room/Room';
+import AuthPage from './components/AuthPage';
+import { SocketProvider } from './context/SocketContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 function PrivateRoute({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth();

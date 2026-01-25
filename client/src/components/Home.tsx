@@ -3,6 +3,7 @@ import { useSocket } from '../context/SocketContext';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import FriendsComponent from './FriendsComponent';
 
 const Home = () => {
     const { socket } = useSocket();
@@ -74,9 +75,13 @@ const Home = () => {
                     </p>
                 )}
 
-                {view === 'main' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Friends Section for Registered Users */}
+                {user && !user.id?.startsWith('guest-') && view === 'main' && (
+                    <FriendsComponent />
+                )}
 
+                {view === 'main' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '20px' }}>
                         {error && <p style={{ color: 'var(--danger)', fontSize: '0.875rem' }}>{error}</p>}
 
                         <button className="btn-primary" onClick={() => setView('create')}>
@@ -87,8 +92,6 @@ const Home = () => {
                             <Users size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
                             Join Room
                         </button>
-
-
                     </div>
                 )}
 

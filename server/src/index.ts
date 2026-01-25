@@ -5,6 +5,7 @@ import cors from 'cors';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
+import friendRoutes from './routes/friends';
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/chatly')
     .catch(err => console.error('MongoDB Connection Error:', err));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/friends', friendRoutes);
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -89,7 +91,36 @@ io.on('connection', (socket) => {
     });
 
     socket.on('join_room', ({ username, userId, roomId }) => {
-        const room = rooms[roomId.toUpperCase()];
+        let room = rooms[roomId.toUpperCase()];
+
+        // Auto-create DM rooms if they don't exist
+        if (!room && roomId.startsWith('dm_')) {
+            const newRoomId = roomId; // Case sensitive for DMs? Or keep upper? 
+            // My client sorts IDs. IDs might be mixed case. 
+            // Better to keep exact ID for DMs.
+            // But rooms map uses uppercase keys? 
+            // Standard create_room uses random alphanumeric uppercase.
+            // Let's rely on the client sending exact ID. 
+            // But if I store it, I should be consistent. 
+            // Let's use the detailed ID as the key for DMs.
+
+            room = {
+                id: roomId,
+                hostId: socket.id, // The first joiner is host (doesn't matter much for DMs)
+                users: [],
+                settings: {
+                    maxPlayers: 2,
+                    isPrivate: true
+                }
+            };
+            rooms[roomId.toUpperCase()] = room; // Store with Upper key like others?
+            // If I store as Upper, I must ensure client sends/checks Upper? 
+            // Mongo IDs are lower case usually. 
+            // Let's just use roomId as is for the ID property, but store in map with Upper Key to match lookup?
+            // "dm_abc_123".toUpperCase() -> "DM_ABC_123". 
+            // Client logic: `dm_${ids[0]}_${ids[1]}`. 
+            // As long as lookup `rooms[roomId.toUpperCase()]` finds it, we are good.
+        }
 
         if (!room) {
             socket.emit('error', 'Room not found');

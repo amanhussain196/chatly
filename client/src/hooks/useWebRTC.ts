@@ -111,7 +111,7 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
     function createPeer(userToSignal: string, _callerID: string, stream: MediaStream) {
         const peer = new SimplePeer({
             initiator: true,
-            trickle: false,
+            trickle: true,
             stream,
             config: {
                 iceServers: [
@@ -139,7 +139,7 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
     function addPeer(incomingSignal: any, callerID: string, stream: MediaStream) {
         const peer = new SimplePeer({
             initiator: false,
-            trickle: false,
+            trickle: true,
             stream,
             config: {
                 iceServers: [

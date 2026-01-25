@@ -94,34 +94,23 @@ io.on('connection', (socket) => {
 
 
     socket.on('join_room', async ({ username, userId, roomId }) => {
-        let room = rooms[roomId.toUpperCase()];
+        const canonicalRoomId = roomId.toUpperCase();
+        let room = rooms[canonicalRoomId];
 
         // Auto-create DM rooms if they don't exist
-        if (!room && roomId.startsWith('dm_')) {
-            const newRoomId = roomId; // Case sensitive for DMs? Or keep upper? 
-            // My client sorts IDs. IDs might be mixed case. 
-            // Better to keep exact ID for DMs.
-            // But rooms map uses uppercase keys? 
-            // Standard create_room uses random alphanumeric uppercase.
-            // Let's rely on the client sending exact ID. 
-            // But if I store it, I should be consistent. 
-            // Let's use the detailed ID as the key for DMs.
-
+        // Check using the canonical ID or the original?
+        // Canonical ID 'DM_...' works for detection.
+        if (!room && canonicalRoomId.startsWith('DM_')) {
             room = {
-                id: roomId,
-                hostId: socket.id, // The first joiner is host (doesn't matter much for DMs)
+                id: canonicalRoomId,
+                hostId: socket.id,
                 users: [],
                 settings: {
                     maxPlayers: 2,
                     isPrivate: true
                 }
             };
-            rooms[roomId.toUpperCase()] = room; // Store with Upper key like others?
-            // If I store as Upper, I must ensure client sends/checks Upper? 
-            // Mongo IDs are lower case usually. 
-            // Let's just use roomId as is for the ID property, but store in map with Upper Key to match lookup?
-            // "dm_abc_123".toUpperCase() -> "DM_ABC_123". 
-            // As long as lookup `rooms[roomId.toUpperCase()]` finds it, we are good.
+            rooms[canonicalRoomId] = room;
         }
 
         if (!room) {
@@ -134,9 +123,9 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Fetch message history
+        // Fetch message history using Canonical ID
         try {
-            const history = await Message.find({ roomId })
+            const history = await Message.find({ roomId: canonicalRoomId })
                 .sort({ createdAt: 1 })
                 .limit(50);
 
@@ -153,7 +142,7 @@ io.on('connection', (socket) => {
 
         const newUser: User = {
             id: socket.id,
-            userId, // Store the auth ID
+            userId,
             username,
             roomId: room.id,
             isHost: false,
@@ -170,10 +159,13 @@ io.on('connection', (socket) => {
     });
 
     socket.on('send_message', async ({ message, roomId }) => {
+        const canonicalRoomId = roomId.toUpperCase();
         const user = users[socket.id];
-        if (user && user.roomId === roomId) {
+
+        // Strict check: user must be in the room they are sending to
+        if (user && user.roomId === canonicalRoomId) {
             const msgData = {
-                roomId,
+                roomId: canonicalRoomId,
                 senderId: user.userId || socket.id,
                 senderUsername: user.username,
                 text: message,
@@ -184,7 +176,7 @@ io.on('connection', (socket) => {
                 const newMsg = new Message(msgData);
                 await newMsg.save();
 
-                io.to(roomId).emit('receive_message', {
+                io.to(canonicalRoomId).emit('receive_message', {
                     id: newMsg._id.toString(),
                     text: newMsg.text,
                     sender: newMsg.senderUsername,
@@ -198,21 +190,14 @@ io.on('connection', (socket) => {
     });
 
     socket.on('mark_read', async ({ messageId, roomId }) => {
-        // Update DB
+        const canonicalRoomId = roomId.toUpperCase();
         try {
             await Message.findByIdAndUpdate(messageId, { status: 'read' });
-            io.to(roomId).emit('message_status_update', { id: messageId, status: 'read' });
+            io.to(canonicalRoomId).emit('message_status_update', { id: messageId, status: 'read' });
         } catch (e) { }
     });
 
     socket.on('get_room_state', ({ roomId }) => {
-        const room = rooms[roomId]; // roomId is case sensitive in keys? In join_room we used roomId.toUpperCase()... wait.
-        // In create_room: roomId = Math.random()...toUpperCase()
-        // In join_room: const room = rooms[roomId.toUpperCase()];
-        // So yes, keys are uppercase.
-        // But the client might satisfy the roomId param from the URL which calls logic.
-
-        // Let's ensure we look it up correctly.
         if (typeof roomId === 'string') {
             const r = rooms[roomId.toUpperCase()];
             if (r) {
@@ -222,31 +207,34 @@ io.on('connection', (socket) => {
     });
 
     socket.on('toggle_mute', ({ roomId }) => {
+        const canonicalRoomId = roomId.toUpperCase();
         const user = users[socket.id];
-        if (user && user.roomId === roomId) {
+        if (user && user.roomId === canonicalRoomId) {
             user.isMuted = !user.isMuted;
-            io.to(roomId).emit('room_users_update', rooms[roomId].users);
+            io.to(canonicalRoomId).emit('room_users_update', rooms[canonicalRoomId].users);
         }
     });
 
 
     socket.on('webrtc_ready', ({ roomId }) => {
-        socket.broadcast.to(roomId).emit('webrtc_ready', { id: socket.id });
+        // Assume roomId comes correct or use user.roomId?
+        // Safer to use user.roomId
+        const user = users[socket.id];
+        if (user && user.roomId) {
+            socket.broadcast.to(user.roomId).emit('webrtc_ready', { id: socket.id });
+        }
     });
 
-    // WebRTC Signaling
-    socket.on('signal', ({ targetId, signal }) => {
-        io.to(targetId).emit('signal', { senderId: socket.id, signal });
-    });
+    // ... signal ...
 
     socket.on('disconnect', () => {
         const user = users[socket.id];
         if (user && user.roomId) {
-            const room = rooms[user.roomId];
+            const room = rooms[user.roomId]; // user.roomId is already uppercase from join_room
             if (room) {
                 room.users = room.users.filter(u => u.id !== socket.id);
 
-                io.to(room.id).emit('user_left', { username: user.username, id: socket.id }); // Send ID for peer cleanup
+                io.to(room.id).emit('user_left', { username: user.username, id: socket.id });
                 io.to(room.id).emit('room_users_update', room.users);
 
                 if (room.users.length === 0) {

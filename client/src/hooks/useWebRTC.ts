@@ -5,51 +5,72 @@ import { Socket } from 'socket.io-client';
 interface Peer {
     peerID: string;
     peer: SimplePeer.Instance;
-    stream: MediaStream | null; // Added stream tracking
+    stream: MediaStream | null;
+    connectionState: 'new' | 'connecting' | 'connected' | 'failed' | 'disconnected';
 }
 
 export const useWebRTC = (socket: Socket | null, roomId: string, userId: string) => {
     const [peers, setPeers] = useState<Peer[]>([]);
     const peersRef = useRef<Peer[]>([]);
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-    const streamRef = useRef<MediaStream | null>(null); // Keep ref for cleanup
+    const [logs, setLogs] = useState<string[]>([]);
+
+    const streamRef = useRef<MediaStream | null>(null);
+
+    const addLog = (msg: string) => {
+        console.log(msg);
+        setLogs(prev => [...prev.slice(-19), new Date().toLocaleTimeString() + ': ' + msg]);
+    };
+
+    const updatePeerState = (id: string, state: Peer['connectionState']) => {
+        const index = peersRef.current.findIndex(p => p.peerID === id);
+        if (index > -1) {
+            peersRef.current[index].connectionState = state;
+            setPeers([...peersRef.current]);
+        }
+    };
+
+    // Helper to update stream safely
+    const updatePeerStream = (id: string, stream: MediaStream) => {
+        const index = peersRef.current.findIndex(p => p.peerID === id);
+        if (index > -1) {
+            peersRef.current[index].stream = stream;
+            setPeers([...peersRef.current]);
+        }
+    };
 
     useEffect(() => {
         if (!socket || !userId) return;
 
-        // Flag to prevent race conditions during cleanup/init
         let isCancelled = false;
 
         const initWebRTC = async () => {
             try {
-                // Determine if we need to request permissions again or reuse? 
-                // Always fresh for safety in this effect lifecycle.
+                addLog('Requesting user media...');
                 const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
                 if (isCancelled) {
-                    // Cleanup usage if effect was cancelled during await
                     stream.getTracks().forEach(t => t.stop());
                     return;
                 }
 
-                console.log("Got local stream:", stream.id);
+                addLog(`Got local stream: ${stream.id}`);
                 streamRef.current = stream;
-                setLocalStream(stream); // Trigger re-render for UI visualizer
+                setLocalStream(stream);
 
-                // Signal that we are ready for WebRTC
                 socket.emit('webrtc_ready', { roomId });
 
                 socket.on('webrtc_ready', (payload: { id: string }) => {
                     if (payload.id === socket.id) return;
-                    console.log("New user ready, initiating:", payload.id);
+                    addLog(`New user ready: ${payload.id}`);
 
-                    // Check if we already have a connection to this peer (double JOIN event protection)
                     if (peersRef.current.find(p => p.peerID === payload.id)) return;
 
                     const peer = createPeer(payload.id, socket.id!, stream);
                     const peerObj: Peer = {
                         peerID: payload.id,
                         peer,
-                        stream: null
+                        stream: null,
+                        connectionState: 'connecting'
                     };
                     peersRef.current.push(peerObj);
                     setPeers([...peersRef.current]);
@@ -60,12 +81,13 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
                     if (item) {
                         item.peer.signal(payload.signal);
                     } else {
-                        console.log("Received signal from new peer:", payload.senderId);
+                        addLog(`Received signal from new peer: ${payload.senderId}`);
                         const peer = addPeer(payload.signal, payload.senderId, stream);
                         const peerObj: Peer = {
                             peerID: payload.senderId,
                             peer,
-                            stream: null
+                            stream: null,
+                            connectionState: 'connecting'
                         };
                         peersRef.current.push(peerObj);
                         setPeers([...peersRef.current]);
@@ -73,7 +95,7 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
                 });
 
                 socket.on('user_left', (payload: { id: string }) => {
-                    console.log("User left:", payload.id);
+                    addLog(`User left: ${payload.id}`);
                     const peerObj = peersRef.current.find(p => p.peerID === payload.id);
                     if (peerObj) {
                         peerObj.peer.destroy();
@@ -83,7 +105,8 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
                     setPeers(newPeers);
                 });
 
-            } catch (err) {
+            } catch (err: any) {
+                addLog(`Failed to get user media: ${err.message}`);
                 console.error("Failed to get user media", err);
             }
         };
@@ -92,7 +115,7 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
 
         return () => {
             isCancelled = true;
-            console.log("Cleaning up WebRTC");
+            addLog("Cleaning up WebRTC");
 
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach(track => track.stop());
@@ -126,12 +149,22 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
         });
 
         peer.on('stream', (remoteStream) => {
-            console.log("Received remote stream from initiator peer");
+            addLog(`Received stream from ${userToSignal}`);
             updatePeerStream(userToSignal, remoteStream);
         });
 
-        peer.on('connect', () => console.log("Peer connected (Initiator)"));
-        peer.on('error', (err) => console.error("Peer error (Initiator):", err));
+        peer.on('connect', () => {
+            addLog(`Peer connected (Init): ${userToSignal}`);
+            updatePeerState(userToSignal, 'connected');
+        });
+
+        peer.on('error', (err) => {
+            addLog(`Peer error (Init) ${userToSignal}: ${err.message}`);
+            updatePeerState(userToSignal, 'failed');
+        });
+
+        // Add close/disconnect handlers
+        peer.on('close', () => updatePeerState(userToSignal, 'disconnected'));
 
         return peer;
     }
@@ -154,36 +187,35 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
         });
 
         peer.on('stream', (remoteStream) => {
-            console.log("Received remote stream from receiver peer");
+            addLog(`Received stream from ${callerID}`);
             updatePeerStream(callerID, remoteStream);
         });
 
-        peer.on('connect', () => console.log("Peer connected (Receiver)"));
-        peer.on('error', (err) => console.error("Peer error (Receiver):", err));
+        peer.on('connect', () => {
+            addLog(`Peer connected (Recv): ${callerID}`);
+            updatePeerState(callerID, 'connected');
+        });
+
+        peer.on('error', (err) => {
+            addLog(`Peer error (Recv) ${callerID}: ${err.message}`);
+            updatePeerState(callerID, 'failed');
+        });
+
+        peer.on('close', () => updatePeerState(callerID, 'disconnected'));
 
         peer.signal(incomingSignal);
 
         return peer;
     }
 
-    // Helper to update state safely
-    const updatePeerStream = (id: string, stream: MediaStream) => {
-        const index = peersRef.current.findIndex(p => p.peerID === id);
-        if (index > -1) {
-            peersRef.current[index].stream = stream;
-            setPeers([...peersRef.current]);
-        }
-    };
-
     const toggleMute = () => {
         if (streamRef.current) {
             const track = streamRef.current.getAudioTracks()[0];
             track.enabled = !track.enabled;
-            return !track.enabled; // return isMuted (inverted) logic: enabled=true means NOT muted.
-            // Actually better to just sync with UI state.
+            return !track.enabled;
         }
         return true;
     };
 
-    return { peers, toggleMute, stream: localStream };
+    return { peers, toggleMute, stream: localStream, logs };
 };

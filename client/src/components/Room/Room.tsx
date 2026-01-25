@@ -79,7 +79,8 @@ const Room = () => {
     }, [messages, activeTab]);
 
     // WebRTC
-    const { peers, toggleMute: toggleAudioMute, stream } = useWebRTC(socket, roomId || '', currentUser?.id || '');
+    const { peers, toggleMute: toggleAudioMute, stream, logs } = useWebRTC(socket, roomId || '', currentUser?.id || '');
+    const [showLogs, setShowLogs] = useState(false);
 
     const sendMessage = (e: React.FormEvent) => {
         e.preventDefault();
@@ -139,6 +140,12 @@ const Room = () => {
                 >
                     People
                 </button>
+                <button
+                    style={{ padding: '12px', background: 'transparent', color: showLogs ? 'var(--accent)' : 'var(--text-muted)' }}
+                    onClick={() => setShowLogs(!showLogs)}
+                >
+                    Logs
+                </button>
             </div>
 
             {/* Content */}
@@ -196,11 +203,13 @@ const Room = () => {
                         {users.map(u => {
                             // Find the stream for this user
                             let userStream = null;
+                            let connectionState = '';
                             if (u.id === currentUser.id) {
                                 userStream = stream; // Local stream
                             } else {
                                 const peer = peers.find(p => p.peerID === u.id);
                                 userStream = peer?.stream;
+                                connectionState = peer?.connectionState || 'unknown';
                             }
 
                             return (
@@ -215,6 +224,7 @@ const Room = () => {
                                             </p>
                                             <p style={{ fontSize: '0.8rem', color: u.isHost ? 'var(--accent)' : 'var(--text-muted)' }}>
                                                 {u.isHost ? 'Host' : 'Participant'}
+                                                {connectionState && <span style={{ marginLeft: 8, fontSize: '0.7rem', color: connectionState === 'connected' ? 'var(--success)' : 'var(--danger)' }}>({connectionState})</span>}
                                             </p>
                                         </div>
                                     </div>
@@ -230,6 +240,19 @@ const Room = () => {
                                 </div>
                             );
                         })}
+                    </div>
+                )}
+
+                {/* Debug Logs */}
+                {showLogs && (
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, overflowY: 'auto', padding: 16, fontSize: '0.8rem', fontFamily: 'monospace' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <h3>WebRTC Logs</h3>
+                            <button onClick={() => setShowLogs(false)} style={{ color: 'red' }}>Close</button>
+                        </div>
+                        {logs.map((log, i) => (
+                            <div key={i} style={{ borderBottom: '1px solid #333', padding: '2px 0' }}>{log}</div>
+                        ))}
                     </div>
                 )}
 

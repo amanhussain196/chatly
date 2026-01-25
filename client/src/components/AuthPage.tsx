@@ -6,19 +6,19 @@ import { useNavigate } from 'react-router-dom';
 const API_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
 const AuthPage = () => {
-    const [isLogin, setIsLogin] = useState(true);
+    const [authMode, setAuthMode] = useState<'login' | 'signup' | 'guest'>('login');
     const [formData, setFormData] = useState({ username: '', email: '', password: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
 
-    const { login, checkAvailability } = useAuth();
+    const { login, loginGuest, checkAvailability } = useAuth();
     const navigate = useNavigate();
 
     // Real-time validation
     useEffect(() => {
         const check = async () => {
-            if (!isLogin && formData.username.length > 2) {
+            if (authMode !== 'login' && formData.username.length > 2) {
                 const isAvailable = await checkAvailability(formData.username, '');
                 setUsernameAvailable(isAvailable);
             } else {
@@ -27,16 +27,27 @@ const AuthPage = () => {
         };
         const timer = setTimeout(check, 500);
         return () => clearTimeout(timer);
-    }, [formData.username, isLogin]);
+    }, [formData.username, authMode]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setLoading(true);
 
+        if (authMode === 'guest') {
+            if (usernameAvailable) {
+                loginGuest(formData.username);
+                navigate('/');
+            } else {
+                setError('Username is not available');
+            }
+            setLoading(false);
+            return;
+        }
+
         try {
-            const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-            const payload = isLogin
+            const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+            const payload = authMode === 'login'
                 ? { identifier: formData.username, password: formData.password } // Allow login with email too if user types it
                 : formData;
 
@@ -59,13 +70,13 @@ const AuthPage = () => {
 
             <div className="card" style={{ width: '100%', maxWidth: 400, padding: 24 }}>
                 <h2 style={{ fontSize: '1.5rem', marginBottom: 20, textAlign: 'center' }}>
-                    {isLogin ? 'Welcome Back' : 'Create Account'}
+                    {authMode === 'login' ? 'Welcome Back' : authMode === 'signup' ? 'Create Account' : 'Guest Access'}
                 </h2>
 
                 {error && <div style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', padding: 10, borderRadius: 8, marginBottom: 16 }}>{error}</div>}
 
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {!isLogin && (
+                    {authMode === 'signup' && (
                         <div>
                             <label style={{ display: 'block', marginBottom: 8 }}>Email</label>
                             <input
@@ -79,16 +90,16 @@ const AuthPage = () => {
                     )}
 
                     <div>
-                        <label style={{ display: 'block', marginBottom: 8 }}>Username</label>
+                        <label style={{ display: 'block', marginBottom: 8 }}>{authMode === 'login' ? 'Username or Email' : 'Username'}</label>
                         <div style={{ position: 'relative' }}>
                             <input
                                 type="text"
                                 required
-                                style={{ width: '100%', padding: 12, borderRadius: 8, border: `1px solid ${usernameAvailable === false ? 'red' : '#333'}`, background: '#1e293b', color: 'white' }}
+                                style={{ width: '100%', padding: 12, borderRadius: 8, border: `1px solid ${(authMode !== 'login' && usernameAvailable === false) ? 'red' : '#333'}`, background: '#1e293b', color: 'white' }}
                                 value={formData.username}
                                 onChange={e => setFormData({ ...formData, username: e.target.value })}
                             />
-                            {!isLogin && usernameAvailable !== null && (
+                            {authMode !== 'login' && usernameAvailable !== null && (
                                 <span style={{ position: 'absolute', right: 10, top: 12, fontSize: 12, color: usernameAvailable ? 'green' : 'red' }}>
                                     {usernameAvailable ? 'Available' : 'Taken'}
                                 </span>
@@ -96,34 +107,61 @@ const AuthPage = () => {
                         </div>
                     </div>
 
-                    <div>
-                        <label style={{ display: 'block', marginBottom: 8 }}>Password</label>
-                        <input
-                            type="password"
-                            required
-                            style={{ width: '100%', padding: 12, borderRadius: 8, border: '1px solid #333', background: '#1e293b', color: 'white' }}
-                            value={formData.password}
-                            onChange={e => setFormData({ ...formData, password: e.target.value })}
-                        />
-                    </div>
+                    {authMode !== 'guest' && (
+                        <div>
+                            <label style={{ display: 'block', marginBottom: 8 }}>Password</label>
+                            <input
+                                type="password"
+                                required
+                                style={{ width: '100%', padding: 12, borderRadius: 8, border: '1px solid #333', background: '#1e293b', color: 'white' }}
+                                value={formData.password}
+                                onChange={e => setFormData({ ...formData, password: e.target.value })}
+                            />
+                        </div>
+                    )}
 
                     <button
                         type="submit"
-                        disabled={loading || (!isLogin && usernameAvailable === false)}
+                        disabled={loading || (authMode !== 'login' && usernameAvailable === false)}
                         style={{ padding: 12, background: 'var(--primary)', color: 'white', borderRadius: 8, border: 'none', cursor: 'pointer', marginTop: 8, opacity: loading ? 0.7 : 1 }}
                     >
-                        {loading ? 'Processing...' : (isLogin ? 'Login' : 'Sign Up')}
+                        {loading ? 'Processing...' : (authMode === 'login' ? 'Login' : authMode === 'signup' ? 'Sign Up' : 'Start as Guest')}
                     </button>
                 </form>
 
-                <div style={{ marginTop: 20, textAlign: 'center', fontSize: '0.9rem', color: '#94a3b8' }}>
-                    {isLogin ? "Don't have an account? " : "Already have an account? "}
-                    <button
-                        onClick={() => setIsLogin(!isLogin)}
-                        style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline' }}
-                    >
-                        {isLogin ? 'Sign Up' : 'Login'}
-                    </button>
+                <div style={{ marginTop: 20, textAlign: 'center', fontSize: '0.9rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {authMode === 'login' ? (
+                        <>
+                            <span>
+                                Don't have an account?{' '}
+                                <button
+                                    onClick={() => setAuthMode('signup')}
+                                    style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline' }}
+                                >
+                                    Sign Up
+                                </button>
+                            </span>
+                            <span>
+                                Or{' '}
+                                <button
+                                    onClick={() => setAuthMode('guest')}
+                                    style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline' }}
+                                >
+                                    Continue as Guest
+                                </button>
+                            </span>
+                        </>
+                    ) : (
+                        <span>
+                            Already have an account?{' '}
+                            <button
+                                onClick={() => setAuthMode('login')}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline' }}
+                            >
+                                Login
+                            </button>
+                        </span>
+                    )}
                 </div>
             </div>
         </div>

@@ -16,6 +16,7 @@ interface AuthContextProps {
     login: (token: string, user: User) => void;
     logout: () => void;
     checkAvailability: (username: string, email: string) => Promise<boolean>;
+    loginGuest: (username: string) => void;
 }
 
 const AuthContext = createContext<AuthContextProps>({
@@ -25,6 +26,7 @@ const AuthContext = createContext<AuthContextProps>({
     login: () => { },
     logout: () => { },
     checkAvailability: async () => false,
+    loginGuest: () => { },
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -42,9 +44,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     const res = await axios.get(`${API_URL}/api/auth/me`);
                     setUser(res.data.user);
                 } catch (err) {
-                    logout();
+                    // Start of modification: Don't auto logout if token fails, check guest
+                    localStorage.removeItem('token');
+                    setToken(null);
+                    delete axios.defaults.headers.common['Authorization'];
                 }
             }
+
+            // Check for guest if no logged in user
+            const guestUser = localStorage.getItem('guest_username');
+            if (!token && guestUser) {
+                setUser({
+                    id: 'guest-' + Math.random().toString(36).substr(2, 9),
+                    username: guestUser,
+                    email: ''
+                });
+            }
+
             setIsLoading(false);
         };
         initAuth();
@@ -52,13 +68,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const login = (newToken: string, newUser: User) => {
         localStorage.setItem('token', newToken);
+        localStorage.removeItem('guest_username'); // Clear guest if logging in
         setToken(newToken);
         setUser(newUser);
         axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
     };
 
+    const loginGuest = (username: string) => {
+        const guestUser = {
+            id: 'guest-' + Math.random().toString(36).substr(2, 9),
+            username,
+            email: ''
+        };
+        localStorage.setItem('guest_username', username);
+        setUser(guestUser);
+    };
+
     const logout = () => {
         localStorage.removeItem('token');
+        localStorage.removeItem('guest_username');
         setToken(null);
         setUser(null);
         delete axios.defaults.headers.common['Authorization'];
@@ -75,7 +103,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, login, logout, checkAvailability }}>
+        <AuthContext.Provider value={{ user, token, isLoading, login, logout, checkAvailability, loginGuest }}>
             {children}
         </AuthContext.Provider>
     );

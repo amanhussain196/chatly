@@ -98,15 +98,14 @@ io.on('connection', (socket) => {
         let room = rooms[canonicalRoomId];
 
         // Auto-create DM rooms if they don't exist
-        // Check using the canonical ID or the original?
-        // Canonical ID 'DM_...' works for detection.
         if (!room && canonicalRoomId.startsWith('DM_')) {
+            console.log(`[DEBUG] Creating NEW DM Room: ${canonicalRoomId} (Max: 20)`);
             room = {
                 id: canonicalRoomId,
                 hostId: socket.id,
                 users: [],
                 settings: {
-                    maxPlayers: 2,
+                    maxPlayers: 20, // Allow multiple devices/tabs per user
                     isPrivate: true
                 }
             };
@@ -118,7 +117,24 @@ io.on('connection', (socket) => {
             return;
         }
 
-        if (room.users.length >= room.settings.maxPlayers) {
+        const uniqueUserIds = new Set<string>();
+        room.users.forEach(u => {
+            if (u.userId) uniqueUserIds.add(u.userId);
+            else uniqueUserIds.add(u.id);
+        });
+
+        // Allow if:
+        // 1. User ID is already in the room (rejoining from another tab)
+        // 2. Socket ID is already in the room (updating session/metadata)
+        const isSocketInRoom = room.users.some(u => u.id === socket.id);
+        const isRejoining = (userId && uniqueUserIds.has(userId)) || isSocketInRoom;
+
+        console.log(`[DEBUG] Join Request: Room=${canonicalRoomId}, User=${username}, ID=${userId || 'guest'} (Socket: ${socket.id})`);
+        console.log(`[DEBUG] Room State: TotalUsers=${room.users.length}, UniqueUsers=${uniqueUserIds.size}, Max=${room.settings.maxPlayers}`);
+        console.log(`[DEBUG] Decision: IsRejoining=${isRejoining}, Full=${uniqueUserIds.size >= room.settings.maxPlayers}`);
+
+        if (!isRejoining && uniqueUserIds.size >= room.settings.maxPlayers) {
+            console.log(`[DEBUG] -> BLOCKED: Room Full`);
             socket.emit('error', 'Room is full');
             return;
         }
@@ -140,12 +156,44 @@ io.on('connection', (socket) => {
             console.error(e);
         }
 
+        let isHost = false;
+
+        // Check if user with same userId already exists in the room
+        if (userId && !userId.startsWith('guest-')) {
+            const existingUserIndex = room.users.findIndex(u => u.userId === userId);
+            if (existingUserIndex !== -1) {
+                // Preserve Host status
+                if (room.users[existingUserIndex].isHost) {
+                    isHost = true;
+                }
+
+                // Remove the old user entry to prevent duplicates
+                // We could also disconnect the old socket, but for now just managing the list is enough
+                const oldSocketId = room.users[existingUserIndex].id;
+
+                // Remove from room.users
+                room.users.splice(existingUserIndex, 1);
+
+                // Remove from users map if it exists there under the old socket ID
+                // Note: user might be switching devices or tabs
+                if (users[oldSocketId]) {
+                    // Optional: maybe we don't need to delete from users map immediately 
+                    // as the disconnect event might handle it, but it's cleaner to ensure we know this is a replacement.
+                }
+            }
+        }
+
+        // If room is empty (first joiner or replacing the only user), make host
+        if (room.users.length === 0) {
+            isHost = true;
+        }
+
         const newUser: User = {
             id: socket.id,
             userId,
             username,
             roomId: room.id,
-            isHost: false,
+            isHost,
             isMuted: false
         };
 

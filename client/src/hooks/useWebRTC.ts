@@ -9,7 +9,7 @@ interface Peer {
     connectionState: 'new' | 'connecting' | 'connected' | 'failed' | 'disconnected';
 }
 
-export const useWebRTC = (socket: Socket | null, roomId: string, userId: string) => {
+export const useWebRTC = (socket: Socket | null, roomId: string, userId: string, enabled: boolean = true) => {
     const [peers, setPeers] = useState<Peer[]>([]);
     const peersRef = useRef<Peer[]>([]);
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -40,7 +40,7 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
     };
 
     useEffect(() => {
-        if (!socket || !userId) return;
+        if (!socket || !userId || !enabled) return;
 
         let isCancelled = false;
 
@@ -135,7 +135,7 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string)
             peersRef.current = [];
             setPeers([]);
         };
-    }, [socket, userId, roomId]);
+    }, [socket, userId, roomId, enabled]);
 
     function createPeer(userToSignal: string, _callerID: string, stream: MediaStream) {
         const peer = new SimplePeer({

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Users, PhoneIncoming, X, Check } from 'lucide-react';
@@ -18,6 +18,7 @@ const Home = () => {
 
     // Call Handling
     const [incomingCall, setIncomingCall] = useState<{ callerId: string, callerName: string, roomId: string } | null>(null);
+    const ringtoneRef = useRef<HTMLAudioElement | null>(null);
 
     useEffect(() => {
         if (!socket) return;
@@ -25,26 +26,44 @@ const Home = () => {
         socket.on('incoming_call', (data) => {
             console.log("Incoming call received in Home:", data);
             setIncomingCall(data);
-            // Play sound?
+
+            // Play ringtone
+            if (!ringtoneRef.current) {
+                ringtoneRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE');
+                ringtoneRef.current.loop = true;
+            }
+            ringtoneRef.current.play().catch((e: unknown) => console.log('Ringtone play failed:', e));
+
+            // Vibrate if supported
+            if ('vibrate' in navigator) {
+                navigator.vibrate([200, 100, 200, 100, 200]);
+            }
         });
 
         socket.on('call_ended', () => {
             setIncomingCall(null);
+            ringtoneRef.current?.pause();
+            if (ringtoneRef.current) ringtoneRef.current.currentTime = 0;
         });
 
         return () => {
             socket.off('incoming_call');
             socket.off('call_ended');
+            ringtoneRef.current?.pause();
         };
     }, [socket]);
 
     const acceptCall = () => {
         if (incomingCall && socket) {
             socket.emit('accept_call', { roomId: incomingCall.roomId });
+            // Stop ringtone
+            ringtoneRef.current?.pause();
+            if (ringtoneRef.current) ringtoneRef.current.currentTime = 0;
             // Navigate to room with 'connected' state so Room.tsx knows to start WebRTC
             navigate(`/room/${incomingCall.roomId}`, {
                 state: {
                     username: user?.username,
+                    friendUsername: incomingCall.callerName,
                     callConnected: true
                 }
             });
@@ -55,6 +74,9 @@ const Home = () => {
     const declineCall = () => {
         if (incomingCall && socket) {
             socket.emit('decline_call', { roomId: incomingCall.roomId });
+            // Stop ringtone
+            ringtoneRef.current?.pause();
+            if (ringtoneRef.current) ringtoneRef.current.currentTime = 0;
             setIncomingCall(null);
         }
     };

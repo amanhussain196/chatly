@@ -30,6 +30,7 @@ const Room = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { socket } = useSocket();
+    const { user } = useAuth(); // Ensure we have the auth user context
     const isDM = roomId?.toLowerCase().startsWith('dm_');
 
     const [users, setUsers] = useState<User[]>([]);
@@ -42,7 +43,7 @@ const Room = () => {
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const { user } = useAuth(); // Get user from context
+
 
     useEffect(() => {
         if (!socket) return;
@@ -180,7 +181,7 @@ const Room = () => {
             socket.emit('initiate_call', {
                 roomId,
                 callerName: currentUser?.username,
-                callerUserId: currentUser?.userId || currentUser?.id
+                callerUserId: user?.id || currentUser?.userId || currentUser?.id
             });
         }
     };

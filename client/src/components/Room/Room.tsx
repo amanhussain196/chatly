@@ -129,7 +129,9 @@ const Room = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, activeTab]);
 
-    const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'ringing' | 'connected'>('idle');
+    const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'ringing' | 'connected'>(
+        location.state?.callConnected ? 'connected' : 'idle'
+    );
     const [incomingCall, setIncomingCall] = useState<{ callerId: string, callerName: string } | null>(null);
 
     // WebRTC: Enabled if NOT DM, OR if DM and Call is Connected
@@ -175,7 +177,11 @@ const Room = () => {
     const initiateCall = () => {
         if (socket) {
             setCallStatus('calling');
-            socket.emit('initiate_call', { roomId, callerName: currentUser?.username });
+            socket.emit('initiate_call', {
+                roomId,
+                callerName: currentUser?.username,
+                callerUserId: currentUser?.userId || currentUser?.id
+            });
         }
     };
 

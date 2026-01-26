@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users } from 'lucide-react';
+import { Plus, Users, PhoneIncoming, X, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import FriendsComponent from './FriendsComponent';
 
@@ -15,6 +15,49 @@ const Home = () => {
     const [roomCode, setRoomCode] = useState('');
     const [error, setError] = useState('');
     const [view, setView] = useState<'main' | 'create' | 'join'>('main');
+
+    // Call Handling
+    const [incomingCall, setIncomingCall] = useState<{ callerId: string, callerName: string, roomId: string } | null>(null);
+
+    useEffect(() => {
+        if (!socket) return;
+
+        socket.on('incoming_call', (data) => {
+            console.log("Incoming call received in Home:", data);
+            setIncomingCall(data);
+            // Play sound?
+        });
+
+        socket.on('call_ended', () => {
+            setIncomingCall(null);
+        });
+
+        return () => {
+            socket.off('incoming_call');
+            socket.off('call_ended');
+        };
+    }, [socket]);
+
+    const acceptCall = () => {
+        if (incomingCall && socket) {
+            socket.emit('accept_call', { roomId: incomingCall.roomId });
+            // Navigate to room with 'connected' state so Room.tsx knows to start WebRTC
+            navigate(`/room/${incomingCall.roomId}`, {
+                state: {
+                    username: user?.username,
+                    callConnected: true
+                }
+            });
+            setIncomingCall(null);
+        }
+    };
+
+    const declineCall = () => {
+        if (incomingCall && socket) {
+            socket.emit('decline_call', { roomId: incomingCall.roomId });
+            setIncomingCall(null);
+        }
+    };
 
     useEffect(() => {
         if (user) {
@@ -55,7 +98,38 @@ const Home = () => {
     };
 
     return (
-        <div className="container" style={{ justifyContent: 'center', padding: '20px' }}>
+        <div className="container" style={{ justifyContent: 'center', padding: '20px', position: 'relative' }}>
+            {/* Incoming Call Overlay */}
+            {incomingCall && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.9)', zIndex: 9999,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '32px'
+                }}>
+                    <div className="animate-bounce" style={{ width: 100, height: 100, borderRadius: '50%', background: 'rgba(34, 197, 94, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <PhoneIncoming size={48} color="var(--success)" />
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                        <h3 style={{ fontSize: '1.8rem' }}>{incomingCall.callerName}</h3>
+                        <p style={{ color: 'var(--text-muted)' }}>Incoming Call...</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '48px' }}>
+                        <button onClick={declineCall} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', background: 'transparent', color: 'var(--danger)' }}>
+                            <div style={{ background: 'rgba(239, 68, 68, 0.2)', padding: '20px', borderRadius: '50%' }}>
+                                <X size={32} />
+                            </div>
+                            <span>Decline</span>
+                        </button>
+                        <button onClick={acceptCall} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', background: 'transparent', color: 'var(--success)' }}>
+                            <div style={{ background: 'rgba(34, 197, 94, 0.2)', padding: '20px', borderRadius: '50%' }}>
+                                <Check size={32} />
+                            </div>
+                            <span>Accept</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <div className="card animate-fade-in" style={{ textAlign: 'center' }}>
                 <h1 style={{ fontSize: '2.5rem', marginBottom: '8px', background: 'linear-gradient(to right, #6366f1, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                     Chatly

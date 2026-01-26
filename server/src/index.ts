@@ -59,9 +59,18 @@ interface Room {
 
 const rooms: Record<string, Room> = {};
 const users: Record<string, User> = {};
+// Map userId -> socketId for global reachability
+const userSessions: Record<string, string> = {};
 
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
+
+    socket.on('register_session', ({ userId, username }) => {
+        if (userId) {
+            userSessions[userId] = socket.id;
+            console.log(`Registered session for ${username} (${userId})`);
+        }
+    });
 
     socket.on('create_room', ({ username, userId, isPrivate }) => {
         const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -278,13 +287,37 @@ io.on('connection', (socket) => {
     });
 
     // --- Call Features (1-1) ---
-    socket.on('initiate_call', ({ roomId, callerName }) => {
+    // --- Call Features (1-1) ---
+    socket.on('initiate_call', ({ roomId, callerName, callerUserId }) => {
         const canonicalRoomId = roomId.toUpperCase();
-        // Broadcast to everyone else in the room (which should be just the other person in a DM)
+
+        // Strategy 1: Broadcast to room (works if user is IN the room)
         socket.broadcast.to(canonicalRoomId).emit('incoming_call', {
             callerId: socket.id,
-            callerName
+            callerName,
+            roomId
         });
+
+        // Strategy 2: Direct message if it's a DM and user is elsewhere (Home Screen)
+        // Format: DM_USER1_USER2 (Sorted)
+        if (canonicalRoomId.startsWith('DM_') && callerUserId) {
+            const parts = canonicalRoomId.replace('DM_', '').split('_');
+            const receiverId = parts.find(id => id !== callerUserId);
+
+            if (receiverId) {
+                const receiverSocketId = userSessions[receiverId];
+                console.log(`[Call Logic] DM Call from ${callerUserId} to ${receiverId}. Target Socket: ${receiverSocketId}`);
+
+                // Need to check if receiverSocketId is actually connected
+                if (receiverSocketId && receiverSocketId !== socket.id) {
+                    io.to(receiverSocketId).emit('incoming_call', {
+                        callerId: socket.id,
+                        callerName,
+                        roomId // Send roomId so they know which room to join
+                    });
+                }
+            }
+        }
     });
 
     socket.on('accept_call', ({ roomId }) => {

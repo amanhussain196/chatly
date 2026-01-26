@@ -302,7 +302,7 @@ io.on('connection', (socket) => {
         // Format: DM_USER1_USER2 (Sorted)
         if (canonicalRoomId.startsWith('DM_') && callerUserId) {
             const parts = canonicalRoomId.replace('DM_', '').split('_');
-            const receiverId = parts.find(id => id !== callerUserId);
+            const receiverId = parts.find((id: string) => id !== callerUserId);
 
             if (receiverId) {
                 const receiverSocketId = userSessions[receiverId];

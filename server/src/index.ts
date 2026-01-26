@@ -302,14 +302,16 @@ io.on('connection', (socket) => {
         // Format: DM_USER1_USER2 (Sorted)
         if (canonicalRoomId.startsWith('DM_') && callerUserId) {
             const parts = canonicalRoomId.replace('DM_', '').split('_');
-            const receiverId = parts.find((id: string) => id !== callerUserId);
+            // Compare case-insensitively
+            const receiverIdUpper = parts.find((id: string) => id.toLowerCase() !== callerUserId.toLowerCase());
 
             console.log(`[Call Debug] Caller: ${callerUserId}, Room: ${canonicalRoomId}`);
-            console.log(`[Call Debug] Parts: ${JSON.stringify(parts)}, Receiver Calculated: ${receiverId}`);
+            console.log(`[Call Debug] Parts: ${JSON.stringify(parts)}, Receiver Calculated (Upper): ${receiverIdUpper}`);
             console.log(`[Call Debug] UserSessions Keys: ${Object.keys(userSessions).length} keys`);
 
-            if (receiverId) {
-                const receiverSocketId = userSessions[receiverId];
+            if (receiverIdUpper) {
+                const receiverId = receiverIdUpper.toLowerCase();
+                const receiverSocketId = userSessions[receiverId] || userSessions[receiverIdUpper];
                 console.log(`[Call Debug] Receiver Socket ID: ${receiverSocketId}`);
                 console.log(`[Call Logic] DM Call from ${callerUserId} to ${receiverId}. Target Socket: ${receiverSocketId}`);
 

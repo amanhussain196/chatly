@@ -277,6 +277,32 @@ io.on('connection', (socket) => {
         io.to(targetId).emit('signal', { senderId: socket.id, signal });
     });
 
+    // --- Call Features (1-1) ---
+    socket.on('initiate_call', ({ roomId, callerName }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        // Broadcast to everyone else in the room (which should be just the other person in a DM)
+        socket.broadcast.to(canonicalRoomId).emit('incoming_call', {
+            callerId: socket.id,
+            callerName
+        });
+    });
+
+    socket.on('accept_call', ({ roomId }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        socket.broadcast.to(canonicalRoomId).emit('call_accepted');
+    });
+
+    socket.on('decline_call', ({ roomId }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        socket.broadcast.to(canonicalRoomId).emit('call_declined');
+    });
+
+    socket.on('end_call', ({ roomId }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        socket.broadcast.to(canonicalRoomId).emit('call_ended');
+    });
+    // ---------------------------
+
     socket.on('disconnect', () => {
         const user = users[socket.id];
         if (user && user.roomId) {

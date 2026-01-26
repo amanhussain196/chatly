@@ -6,7 +6,7 @@ import VoiceVisualizer from './VoiceVisualizer';
 
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
-import { Mic, MicOff, Send, PhoneOff, Copy, User as UserIcon, MessageSquare } from 'lucide-react';
+import { Mic, MicOff, Send, PhoneOff, Copy, User as UserIcon, MessageSquare, Phone, PhoneIncoming, X, Check } from 'lucide-react';
 
 
 interface User {
@@ -129,8 +129,78 @@ const Room = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, activeTab]);
 
+    const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'ringing' | 'connected'>('idle');
+    const [incomingCall, setIncomingCall] = useState<{ callerId: string, callerName: string } | null>(null);
+
+    // WebRTC: Enabled if NOT DM, OR if DM and Call is Connected
+    const webrtcEnabled = !isDM || callStatus === 'connected';
+
     // WebRTC
-    const { peers, toggleMute: toggleAudioMute, stream, logs } = useWebRTC(socket, roomId || '', currentUser?.id || '', !isDM);
+    const { peers, toggleMute: toggleAudioMute, stream, logs } = useWebRTC(socket, roomId || '', currentUser?.id || '', webrtcEnabled);
+
+    useEffect(() => {
+        if (!socket) return;
+
+        socket.on('incoming_call', ({ callerId, callerName }) => {
+            if (callStatus === 'idle') {
+                setIncomingCall({ callerId, callerName });
+                setCallStatus('ringing');
+            }
+        });
+
+        socket.on('call_accepted', () => {
+            if (callStatus === 'calling') {
+                setCallStatus('connected');
+            }
+        });
+
+        socket.on('call_declined', () => {
+            setCallStatus('idle');
+            alert('Call Declined');
+        });
+
+        socket.on('call_ended', () => {
+            setCallStatus('idle');
+            setIncomingCall(null);
+        });
+
+        return () => {
+            socket.off('incoming_call');
+            socket.off('call_accepted');
+            socket.off('call_declined');
+            socket.off('call_ended');
+        };
+    }, [socket, callStatus]);
+
+    const initiateCall = () => {
+        if (socket) {
+            setCallStatus('calling');
+            socket.emit('initiate_call', { roomId, callerName: currentUser?.username });
+        }
+    };
+
+    const acceptCall = () => {
+        if (socket) {
+            socket.emit('accept_call', { roomId });
+            setCallStatus('connected');
+            setIncomingCall(null);
+        }
+    };
+
+    const declineCall = () => {
+        if (socket) {
+            socket.emit('decline_call', { roomId });
+            setCallStatus('idle');
+            setIncomingCall(null);
+        }
+    };
+
+    const endCall = () => {
+        if (socket) {
+            socket.emit('end_call', { roomId });
+            setCallStatus('idle');
+        }
+    };
 
     const sendMessage = (e: React.FormEvent) => {
         e.preventDefault();
@@ -194,12 +264,72 @@ const Room = () => {
     );
 
     return (
-        <div className="container" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <div className="container" style={{ height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+
+            {/* Calling Overlay (Outgoing) */}
+            {callStatus === 'calling' && (
+                <div style={{
+                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.85)', zIndex: 50,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '24px'
+                }}>
+                    <div className="animate-pulse" style={{ width: 100, height: 100, borderRadius: '50%', background: 'rgba(99, 102, 241, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <UserIcon size={48} color="var(--primary)" />
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                        <h3 style={{ fontSize: '1.5rem' }}>Calling {friendUsername || 'User'}...</h3>
+                        <p style={{ color: 'var(--text-muted)' }}>Waiting for response</p>
+                    </div>
+                    <button onClick={endCall} style={{ background: 'var(--danger)', padding: '16px', borderRadius: '50%', color: 'white', border: 'none' }}>
+                        <PhoneOff size={32} />
+                    </button>
+                </div>
+            )}
+
+            {/* Incoming Call Overlay */}
+            {callStatus === 'ringing' && incomingCall && (
+                <div style={{
+                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.9)', zIndex: 60,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '32px'
+                }}>
+                    <div className="animate-bounce" style={{ width: 100, height: 100, borderRadius: '50%', background: 'rgba(34, 197, 94, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <PhoneIncoming size={48} color="var(--success)" />
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                        <h3 style={{ fontSize: '1.8rem' }}>{incomingCall.callerName}</h3>
+                        <p style={{ color: 'var(--text-muted)' }}>Incoming Voice Call</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '48px' }}>
+                        <button onClick={declineCall} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', background: 'transparent', color: 'var(--danger)' }}>
+                            <div style={{ background: 'rgba(239, 68, 68, 0.2)', padding: '20px', borderRadius: '50%' }}>
+                                <X size={32} />
+                            </div>
+                            <span>Decline</span>
+                        </button>
+                        <button onClick={acceptCall} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', background: 'transparent', color: 'var(--success)' }}>
+                            <div style={{ background: 'rgba(34, 197, 94, 0.2)', padding: '20px', borderRadius: '50%' }}>
+                                <Check size={32} />
+                            </div>
+                            <span>Accept</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div style={{ padding: '16px', background: 'var(--bg-card)', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                     {isDM ? (
-                        <h2 style={{ fontSize: '1.2rem', fontWeight: '700' }}>{friendUsername ? `Chat with ${friendUsername}` : 'Private Chat'}</h2>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg, #4f46e5, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{friendUsername?.charAt(0).toUpperCase() || '?'}</span>
+                            </div>
+                            <div>
+                                <h2 style={{ fontSize: '1.2rem', fontWeight: '700' }}>{friendUsername || 'Private Chat'}</h2>
+                                {callStatus === 'connected' && <span style={{ fontSize: '0.8rem', color: 'var(--success)' }}>Call Connected</span>}
+                            </div>
+                        </div>
                     ) : (
                         <div>
                             <h2 style={{ fontSize: '1.2rem', fontWeight: '700' }}>Room: <span style={{ fontFamily: 'monospace', color: 'var(--primary)', cursor: 'pointer' }} onClick={copyRoomCode}>{roomId} <Copy size={14} style={{ display: 'inline' }} /></span></h2>
@@ -379,23 +509,46 @@ const Room = () => {
                 ))}
             </div>
 
-            {/* Voice Controls (Sticky Footer Style) */}
-            {/* Voice Controls (Hidden for DM) */}
-            {/* Voice Controls (Sticky Footer Style) */}
+            {/* Footer Controls */}
             <div style={{ padding: '16px', background: 'var(--bg-card)', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-                <button onClick={handleToggleMute} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'transparent', color: currentUser.isMuted ? 'var(--danger)' : 'white' }}>
-                    <div style={{ position: 'relative', padding: '12px', background: currentUser.isMuted ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255,255,255,0.1)', borderRadius: '50%' }}>
-                        {currentUser.isMuted ? <MicOff size={24} /> : <Mic size={24} />}
-                        {/* Local Visualizer Overlay */}
-                        {!currentUser.isMuted && stream && (
-                            <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)' }}>
-                                <VoiceVisualizer stream={stream} />
-                            </div>
-                        )}
-                    </div>
-                    <span style={{ fontSize: '0.75rem' }}>{currentUser.isMuted ? 'Unmute' : 'Mute'}</span>
-                </button>
 
+                {/* Microphone - Show in Group Rooms OR if Call is Connected in DM */}
+                {(!isDM || callStatus === 'connected') && (
+                    <button onClick={handleToggleMute} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'transparent', color: currentUser.isMuted ? 'var(--danger)' : 'white' }}>
+                        <div style={{ position: 'relative', padding: '12px', background: currentUser.isMuted ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255,255,255,0.1)', borderRadius: '50%' }}>
+                            {currentUser.isMuted ? <MicOff size={24} /> : <Mic size={24} />}
+                            {/* Local Visualizer Overlay */}
+                            {!currentUser.isMuted && stream && (
+                                <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)' }}>
+                                    <VoiceVisualizer stream={stream} />
+                                </div>
+                            )}
+                        </div>
+                        <span style={{ fontSize: '0.75rem' }}>{currentUser.isMuted ? 'Unmute' : 'Mute'}</span>
+                    </button>
+                )}
+
+                {/* Call Button - Show ONLY in DM when Idle */}
+                {isDM && callStatus === 'idle' && (
+                    <button onClick={initiateCall} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'transparent', color: 'var(--success)' }}>
+                        <div style={{ padding: '12px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '50%' }}>
+                            <Phone size={24} />
+                        </div>
+                        <span style={{ fontSize: '0.75rem' }}>Call</span>
+                    </button>
+                )}
+
+                {/* End Call Button - Show ONLY in DM when Connected */}
+                {isDM && callStatus === 'connected' && (
+                    <button onClick={endCall} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'transparent', color: 'var(--danger)' }}>
+                        <div style={{ padding: '12px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '50%' }}>
+                            <PhoneOff size={24} />
+                        </div>
+                        <span style={{ fontSize: '0.75rem' }}>End</span>
+                    </button>
+                )}
+
+                {/* Start Game - Show ONLY in Group Rooms */}
                 {!isDM && (
                     <button disabled style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'transparent', color: 'var(--text-muted)', opacity: 0.5 }}>
                         <div style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '50%' }}>

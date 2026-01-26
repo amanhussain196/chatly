@@ -178,6 +178,11 @@ const Room = () => {
     const initiateCall = () => {
         if (socket) {
             setCallStatus('calling');
+            console.log('[Room] Initiating call with payload:', {
+                roomId,
+                callerName: currentUser?.username,
+                callerUserId: user?.id || currentUser?.userId || currentUser?.id
+            });
             socket.emit('initiate_call', {
                 roomId,
                 callerName: currentUser?.username,

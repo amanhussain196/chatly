@@ -52,6 +52,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     // Effect to register session when user logs in AFTER socket connects
     useEffect(() => {
         if (socket && isConnected && user && user.id) {
+            console.log(`[Client] Registering session for ${user.username} (${user.id})`);
             socket.emit('register_session', { userId: user.id, username: user.username });
         }
     }, [socket, isConnected, user]);

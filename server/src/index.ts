@@ -273,7 +273,9 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ... signal ...
+    socket.on('signal', ({ targetId, signal }) => {
+        io.to(targetId).emit('signal', { senderId: socket.id, signal });
+    });
 
     socket.on('disconnect', () => {
         const user = users[socket.id];

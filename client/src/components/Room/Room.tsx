@@ -6,7 +6,7 @@ import VoiceVisualizer from './VoiceVisualizer';
 
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
-import { Mic, MicOff, Send, PhoneOff, Copy, User as UserIcon } from 'lucide-react';
+import { Mic, MicOff, Send, PhoneOff, Copy, User as UserIcon, MessageSquare } from 'lucide-react';
 
 
 interface User {
@@ -381,24 +381,30 @@ const Room = () => {
 
             {/* Voice Controls (Sticky Footer Style) */}
             {/* Voice Controls (Hidden for DM) */}
-            {!isDM && (
-                <div style={{ padding: '16px', background: 'var(--bg-card)', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-                    <button onClick={handleToggleMute} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'transparent', color: currentUser.isMuted ? 'var(--danger)' : 'white' }}>
-                        <div style={{ position: 'relative', padding: '12px', background: currentUser.isMuted ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255,255,255,0.1)', borderRadius: '50%' }}>
-                            {currentUser.isMuted ? <MicOff size={24} /> : <Mic size={24} />}
-                            {/* Local Visualizer Overlay */}
-                            {!currentUser.isMuted && stream && (
-                                <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)' }}>
-                                    <VoiceVisualizer stream={stream} />
-                                </div>
-                            )}
+            {/* Voice Controls (Sticky Footer Style) */}
+            <div style={{ padding: '16px', background: 'var(--bg-card)', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+                <button onClick={handleToggleMute} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'transparent', color: currentUser.isMuted ? 'var(--danger)' : 'white' }}>
+                    <div style={{ position: 'relative', padding: '12px', background: currentUser.isMuted ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255,255,255,0.1)', borderRadius: '50%' }}>
+                        {currentUser.isMuted ? <MicOff size={24} /> : <Mic size={24} />}
+                        {/* Local Visualizer Overlay */}
+                        {!currentUser.isMuted && stream && (
+                            <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)' }}>
+                                <VoiceVisualizer stream={stream} />
+                            </div>
+                        )}
+                    </div>
+                    <span style={{ fontSize: '0.75rem' }}>{currentUser.isMuted ? 'Unmute' : 'Mute'}</span>
+                </button>
+
+                {!isDM && (
+                    <button disabled style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'transparent', color: 'var(--text-muted)', opacity: 0.5 }}>
+                        <div style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '50%' }}>
+                            <MessageSquare size={24} />
                         </div>
-                        <span style={{ fontSize: '0.75rem' }}>{currentUser.isMuted ? 'Unmute' : 'Mute'}</span>
+                        <span style={{ fontSize: '0.75rem' }}>Start Game</span>
                     </button>
-
-
-                </div>
-            )}
+                )}
+            </div>
 
         </div>
     );

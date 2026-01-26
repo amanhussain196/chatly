@@ -304,8 +304,13 @@ io.on('connection', (socket) => {
             const parts = canonicalRoomId.replace('DM_', '').split('_');
             const receiverId = parts.find((id: string) => id !== callerUserId);
 
+            console.log(`[Call Debug] Caller: ${callerUserId}, Room: ${canonicalRoomId}`);
+            console.log(`[Call Debug] Parts: ${JSON.stringify(parts)}, Receiver Calculated: ${receiverId}`);
+            console.log(`[Call Debug] UserSessions Keys: ${Object.keys(userSessions).length} keys`);
+
             if (receiverId) {
                 const receiverSocketId = userSessions[receiverId];
+                console.log(`[Call Debug] Receiver Socket ID: ${receiverSocketId}`);
                 console.log(`[Call Logic] DM Call from ${callerUserId} to ${receiverId}. Target Socket: ${receiverSocketId}`);
 
                 // Need to check if receiverSocketId is actually connected

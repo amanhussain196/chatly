@@ -10,7 +10,6 @@ interface StackTowerProps {
 }
 
 const BOARD_WIDTH = 400;
-const BOARD_HEIGHT = 400;
 const BLOCK_HEIGHT = 20;
 const INITIAL_WIDTH = 250;
 const SPEED_BASE = 4;
@@ -25,7 +24,6 @@ const BLOCK_COLORS = [
 
 const StackTower: React.FC<StackTowerProps> = ({ gameState, socket, roomId, currentUserId, isHost }) => {
     const p1 = gameState.players[0];
-    const p2 = gameState.players[1];
 
     const me = gameState.players.find((p: any) => p.id === currentUserId);
     const opponent = gameState.players.find((p: any) => p.id !== currentUserId);
@@ -48,7 +46,7 @@ const StackTower: React.FC<StackTowerProps> = ({ gameState, socket, roomId, curr
     const [localHistory, setLocalHistory] = useState<{ width: number, offset: number, color: string }[]>([]);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const requestRef = useRef<number>();
+    const requestRef = useRef<number | undefined>();
 
     // Initial Setup / Reset
     useEffect(() => {
@@ -73,7 +71,6 @@ const StackTower: React.FC<StackTowerProps> = ({ gameState, socket, roomId, curr
                 return;
             }
 
-            const dt = time - movingBlockRef.current.lastTime;
             movingBlockRef.current.lastTime = time;
 
             const currentSpeed = movingBlockRef.current.speed + (myScore * 0.1);

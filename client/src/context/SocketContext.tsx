@@ -3,9 +3,9 @@ import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext'; // Import Auth
 
 // Dynamically determine the socket URL based on the current window location
-const SOCKET_PORT = 3002;
-const SOCKET_URL = `${window.location.protocol}//${window.location.hostname}:${SOCKET_PORT}`;
-console.log('[SocketContext] Determined URL:', SOCKET_URL);
+// Prioritize the environment variable, fallback to local logic for development without env
+const SOCKET_URL = import.meta.env.VITE_SERVER_URL || `${window.location.protocol}//${window.location.hostname}:3002`;
+console.log('[SocketContext] Connecting to:', SOCKET_URL);
 
 interface SocketContextProps {
     socket: Socket | null;

@@ -46,7 +46,7 @@ const StackTower: React.FC<StackTowerProps> = ({ gameState, socket, roomId, curr
     const [localHistory, setLocalHistory] = useState<{ width: number, offset: number, color: string }[]>([]);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const requestRef = useRef<number | undefined>();
+    const requestRef = useRef<number | undefined>(undefined);
 
     // Initial Setup / Reset
     useEffect(() => {

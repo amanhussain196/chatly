@@ -2,7 +2,10 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext'; // Import Auth
 
-const SOCKET_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+// Dynamically determine the socket URL based on the current window location
+const SOCKET_PORT = 3002;
+const SOCKET_URL = `${window.location.protocol}//${window.location.hostname}:${SOCKET_PORT}`;
+console.log('[SocketContext] Determined URL:', SOCKET_URL);
 
 interface SocketContextProps {
     socket: Socket | null;
@@ -22,6 +25,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     const { user } = useAuth(); // Get authenticated user
 
     useEffect(() => {
+        console.log('[SocketContext] Connecting to:', SOCKET_URL);
         const newSocket = io(SOCKET_URL, {
             transports: ['websocket'],
             autoConnect: true,

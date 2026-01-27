@@ -32,14 +32,50 @@ const FriendsComponent = () => {
 
     // ... existing functions ...
 
+    const [unreadMap, setUnreadMap] = useState<Record<string, boolean>>({});
+
+    const updateUnreadState = () => {
+        const newMap: Record<string, boolean> = {};
+        if (friends) {
+            friends.forEach(f => {
+                if (user?.id) {
+                    const ids = [user.id, f._id].sort();
+                    const roomId = `dm_${ids[0]}_${ids[1]}`.toUpperCase();
+                    newMap[f._id] = localStorage.getItem(`unread_${roomId}`) === 'true';
+                }
+            });
+        }
+        setUnreadMap(newMap);
+    };
+
+    useEffect(() => {
+        updateUnreadState();
+    }, [friends, user]);
+
+    useEffect(() => {
+        const handleStorage = () => updateUnreadState();
+        window.addEventListener('storage', handleStorage);
+        return () => window.removeEventListener('storage', handleStorage);
+    }, [friends, user]);
+
+    const hasUnread = (friendId: string) => {
+        return unreadMap[friendId] || false;
+    };
+
+    const clearUnread = (friendId: string) => {
+        if (!user?.id) return;
+        const ids = [user.id, friendId].sort();
+        const roomId = `dm_${ids[0]}_${ids[1]}`.toUpperCase();
+        localStorage.removeItem(`unread_${roomId}`);
+        updateUnreadState();
+    };
+
     const startChat = (friendId: string, friendUsername: string) => {
         if (!user || !user.id || !friendId) return;
+        clearUnread(friendId); // Clear dot when entering chat
 
-        // Deterministic Room ID for 1-to-1 chat
         const ids = [user.id, friendId].sort();
         const roomId = `dm_${ids[0]}_${ids[1]}`;
-
-        // Navigate immediately - Room.tsx handles the actual join/creation handshake
         navigate(`/room/${roomId}`, { state: { username: user.username, friendUsername } });
     };
 
@@ -88,8 +124,10 @@ const FriendsComponent = () => {
 
 
 
+
     return (
         <div className="card" style={{ padding: '20px', marginTop: '20px' }}>
+            {/* ... Header ... */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h2 style={{ fontSize: '1.2rem' }}>Friends</h2>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -167,14 +205,29 @@ const FriendsComponent = () => {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 {friends.map(friend => (
                                     <div key={friend._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
                                             <div style={{ width: '32px', height: '32px', background: '#4f46e5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                 <span style={{ fontWeight: 'bold' }}>{friend.username.charAt(0).toUpperCase()}</span>
                                             </div>
                                             <span>{friend.username}</span>
+                                            {/* Unread Dot */}
+                                            {hasUnread(friend._id) && (
+                                                <div style={{
+                                                    width: '10px', height: '10px',
+                                                    background: 'var(--danger)', borderRadius: '50%',
+                                                    position: 'absolute', top: 0, left: 0,
+                                                    border: '2px solid var(--bg-card)'
+                                                }} />
+                                            )}
                                         </div>
-                                        <button onClick={() => startChat(friend._id, friend.username)} style={{ padding: '8px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', color: 'var(--primary)', cursor: 'pointer' }} title="Message">
+                                        <button onClick={() => startChat(friend._id, friend.username)} style={{ padding: '8px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', color: 'var(--primary)', cursor: 'pointer', position: 'relative' }} title="Message">
                                             <MessageSquare size={18} />
+                                            {hasUnread(friend._id) && (
+                                                <span style={{
+                                                    position: 'absolute', top: -5, right: -5,
+                                                    width: '8px', height: '8px', background: 'var(--danger)', borderRadius: '50%'
+                                                }} />
+                                            )}
                                         </button>
                                     </div>
                                 ))}

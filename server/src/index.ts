@@ -7,25 +7,35 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import friendRoutes from './routes/friends';
 import { Message } from './models/Message';
+import { localStore } from './services/localStore';
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
-app.use(express.json()); // Enable JSON body parsing
+app.use(express.json());
 
-// Check if MONGO_URI is set
+app.get('/ping', (req, res) => {
+    console.log('[HTTP] /ping received from ' + req.ip);
+    res.send({ status: 'ok', msg: 'Server is reachable' });
+});
+
 if (!process.env.MONGO_URI) {
     console.warn("WARNING: MONGO_URI not set. Auth features will fail.");
 }
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/chatly')
-    .then(() => console.log('MongoDB Connected'))
-    .catch(err => console.error('MongoDB Connection Error:', err));
+if (process.env.MONGO_URI) {
+    mongoose.connect(process.env.MONGO_URI)
+        .then(() => console.log('MongoDB Connected'))
+        .catch(err => console.error('MongoDB Connection Error:', err));
+} else {
+    console.log("!!! NO MONGO_URI SET - RUNNING IN GUEST/MEMORY MODE (No DB) !!!");
+}
 
 app.use('/api/auth', authRoutes);
 app.use('/api/friends', friendRoutes);
+
+const PORT = process.env.PORT || 3002;
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -35,35 +45,143 @@ const io = new Server(server, {
     }
 });
 
-const PORT = process.env.PORT || 3001;
-
-// State management (Keep it in memory for now as per requirements)
-interface User {
-    id: string;
-    userId?: string; // Auth ID or Guest ID
+// --- Types ---
+interface ChatUser {
+    id: string; // socket.id
+    userId?: string; // auth id
     username: string;
     roomId?: string;
     isHost: boolean;
     isMuted: boolean;
 }
 
-interface Room {
+interface ChatRoom {
     id: string;
     hostId: string;
-    users: User[];
+    users: ChatUser[];
     settings: {
         maxPlayers: number;
         isPrivate: boolean;
     };
+    game?: {
+        type: 'tictactoe';
+        state: any;
+        timer?: any; // NodeJS.Timeout
+    };
 }
 
-const rooms: Record<string, Room> = {};
-const users: Record<string, User> = {};
-// Map userId -> socketId for global reachability
-const userSessions: Record<string, string> = {};
+// --- Globals ---
+const rooms: Record<string, ChatRoom> = {};
+const users: Record<string, ChatUser> = {};
+const userSessions: Record<string, string> = {}; // userId -> socketId
+
+// --- Game Logic Helpers ---
+const checkWinner = (board: any[]) => {
+    const winPatterns = [
+        [0, 1, 2], [3, 4, 5], [6, 7, 8],
+        [0, 3, 6], [1, 4, 7], [2, 5, 8],
+        [0, 4, 8], [2, 4, 6]
+    ];
+    for (const pattern of winPatterns) {
+        const [a, b, c] = pattern;
+        if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a];
+    }
+    if (!board.includes(null)) return 'draw';
+    return null;
+};
+
+const minimax = (board: any[], depth: number, isMaximizing: boolean, aiSymbol: string, humanSymbol: string) => {
+    const result = checkWinner(board);
+    if (result === aiSymbol) return 10 - depth;
+    if (result === humanSymbol) return depth - 10;
+    if (result === 'draw') return 0;
+
+    if (isMaximizing) {
+        let bestScore = -Infinity;
+        for (let i = 0; i < 9; i++) {
+            if (board[i] === null) {
+                board[i] = aiSymbol;
+                const score = minimax(board, depth + 1, false, aiSymbol, humanSymbol);
+                board[i] = null;
+                bestScore = Math.max(score, bestScore);
+            }
+        }
+        return bestScore;
+    } else {
+        let bestScore = Infinity;
+        for (let i = 0; i < 9; i++) {
+            if (board[i] === null) {
+                board[i] = humanSymbol;
+                const score = minimax(board, depth + 1, true, aiSymbol, humanSymbol);
+                board[i] = null;
+                bestScore = Math.min(score, bestScore);
+            }
+        }
+        return bestScore;
+    }
+};
+
+const getBestMove = (board: any[], aiSymbol: string) => {
+    let bestScore = -Infinity;
+    let move = -1;
+    const humanSymbol = aiSymbol === 'X' ? 'O' : 'X';
+    if (board.filter((c: any) => c !== null).length === 0) return 4;
+
+    for (let i = 0; i < 9; i++) {
+        if (board[i] === null) {
+            board[i] = aiSymbol;
+            const score = minimax(board, 0, false, aiSymbol, humanSymbol);
+            board[i] = null;
+            if (score > bestScore) {
+                bestScore = score;
+                move = i;
+            }
+        }
+    }
+    return move;
+};
+
+// Helper to strip timer/internal data before sending to client
+const getSafeGame = (game: any) => {
+    if (!game) return null;
+    return {
+        type: game.type,
+        state: game.state
+    };
+};
+
+const resetGameTimer = (room: any, roomId: string, turnPlayerId: string) => {
+    if (room.game.timer) clearTimeout(room.game.timer);
+
+    // AI moves instantly, no need for timer against it
+    if (turnPlayerId === 'AI') return;
+
+    room.game.state.lastMoveTime = Date.now();
+
+    room.game.timer = setTimeout(() => {
+        const game = room.game.state;
+        // Check availability just in case
+        if (!game || game.winner || game.draw) return;
+
+        const loserId = turnPlayerId;
+        // Winner is the *other* player (simplified for 2p)
+        const winner = game.players.find((p: any) => p.id !== loserId);
+
+        if (winner) {
+            game.winner = winner.id;
+            game.winReason = 'timeout';
+            io.to(roomId).emit('game_update', getSafeGame(room.game));
+        }
+    }, 15000);
+};
+
 
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
+
+    socket.onAny((event, ...args) => {
+        // console.log(`[SERVER RAW EVENT] Event: '${event}' from ${socket.id}`);
+    });
 
     socket.on('register_session', ({ userId, username }) => {
         if (userId) {
@@ -74,25 +192,12 @@ io.on('connection', (socket) => {
 
     socket.on('create_room', ({ username, userId, isPrivate }) => {
         const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-        const newUser: User = {
-            id: socket.id,
-            userId,
-            username,
-            roomId,
-            isHost: true,
-            isMuted: false
-        };
+        const newUser: ChatUser = { id: socket.id, userId, username, roomId, isHost: true, isMuted: false };
 
         users[socket.id] = newUser;
         rooms[roomId] = {
-            id: roomId,
-            hostId: socket.id,
-            users: [newUser],
-            settings: {
-                maxPlayers: 8, // Default
-                isPrivate
-            }
+            id: roomId, hostId: socket.id, users: [newUser],
+            settings: { maxPlayers: 8, isPrivate }
         };
 
         socket.join(roomId);
@@ -106,106 +211,38 @@ io.on('connection', (socket) => {
         const canonicalRoomId = roomId.toUpperCase();
         let room = rooms[canonicalRoomId];
 
-        // Auto-create DM rooms if they don't exist
+        // DM Room Auto-Creation
         if (!room && canonicalRoomId.startsWith('DM_')) {
-            console.log(`[DEBUG] Creating NEW DM Room: ${canonicalRoomId} (Max: 20)`);
             room = {
-                id: canonicalRoomId,
-                hostId: socket.id,
-                users: [],
-                settings: {
-                    maxPlayers: 20, // Allow multiple devices/tabs per user
-                    isPrivate: true
-                }
+                id: canonicalRoomId, hostId: socket.id, users: [],
+                settings: { maxPlayers: 20, isPrivate: true }
             };
             rooms[canonicalRoomId] = room;
         }
 
-        if (!room) {
-            socket.emit('error', 'Room not found');
-            return;
-        }
+        if (!room) { socket.emit('error', 'Room not found'); return; }
 
         const uniqueUserIds = new Set<string>();
-        room.users.forEach(u => {
-            if (u.userId) uniqueUserIds.add(u.userId);
-            else uniqueUserIds.add(u.id);
-        });
-
-        // Allow if:
-        // 1. User ID is already in the room (rejoining from another tab)
-        // 2. Socket ID is already in the room (updating session/metadata)
+        room.users.forEach(u => uniqueUserIds.add(u.userId || u.id));
         const isSocketInRoom = room.users.some(u => u.id === socket.id);
         const isRejoining = (userId && uniqueUserIds.has(userId)) || isSocketInRoom;
 
-        console.log(`[DEBUG] Join Request: Room=${canonicalRoomId}, User=${username}, ID=${userId || 'guest'} (Socket: ${socket.id})`);
-        console.log(`[DEBUG] Room State: TotalUsers=${room.users.length}, UniqueUsers=${uniqueUserIds.size}, Max=${room.settings.maxPlayers}`);
-        console.log(`[DEBUG] Decision: IsRejoining=${isRejoining}, Full=${uniqueUserIds.size >= room.settings.maxPlayers}`);
-
         if (!isRejoining && uniqueUserIds.size >= room.settings.maxPlayers) {
-            console.log(`[DEBUG] -> BLOCKED: Room Full`);
             socket.emit('error', 'Room is full');
             return;
         }
 
-        // Fetch message history using Canonical ID
-        try {
-            const history = await Message.find({ roomId: canonicalRoomId })
-                .sort({ createdAt: 1 })
-                .limit(50);
-
-            socket.emit('message_history', history.map(msg => ({
-                id: msg._id.toString(),
-                text: msg.text,
-                sender: msg.senderUsername,
-                timestamp: msg.createdAt.toISOString(),
-                status: msg.status
-            })));
-        } catch (e) {
-            console.error(e);
-        }
-
-        let isHost = false;
-
-        // Check if user with same userId already exists in the room
+        // Host logic for rejoin
+        let isHost = room.users.length === 0;
         if (userId && !userId.startsWith('guest-')) {
             const existingUserIndex = room.users.findIndex(u => u.userId === userId);
             if (existingUserIndex !== -1) {
-                // Preserve Host status
-                if (room.users[existingUserIndex].isHost) {
-                    isHost = true;
-                }
-
-                // Remove the old user entry to prevent duplicates
-                // We could also disconnect the old socket, but for now just managing the list is enough
-                const oldSocketId = room.users[existingUserIndex].id;
-
-                // Remove from room.users
+                if (room.users[existingUserIndex].isHost) isHost = true;
                 room.users.splice(existingUserIndex, 1);
-
-                // Remove from users map if it exists there under the old socket ID
-                // Note: user might be switching devices or tabs
-                if (users[oldSocketId]) {
-                    // Optional: maybe we don't need to delete from users map immediately 
-                    // as the disconnect event might handle it, but it's cleaner to ensure we know this is a replacement.
-                }
             }
         }
 
-        // If room is empty (first joiner or replacing the only user), make host
-        if (room.users.length === 0) {
-            isHost = true;
-        }
-
-        const newUser: User = {
-            id: socket.id,
-            userId,
-            username,
-            roomId: room.id,
-            isHost,
-            isMuted: false
-        };
-
+        const newUser: ChatUser = { id: socket.id, userId, username, roomId: room.id, isHost, isMuted: false };
         users[socket.id] = newUser;
         room.users.push(newUser);
 
@@ -213,52 +250,95 @@ io.on('connection', (socket) => {
         socket.emit('room_joined', { roomId: room.id, user: newUser });
         io.to(room.id).emit('user_joined', { username, id: socket.id });
         io.to(room.id).emit('room_users_update', room.users);
+
+        if (room.game) socket.emit('game_started', getSafeGame(room.game));
+
+        // --- MESSAGE HISTORY ---
+        if (process.env.MONGO_URI) {
+            (async () => {
+                try {
+                    const history = await Message.find({ roomId: canonicalRoomId }).sort({ createdAt: 1 }).limit(50);
+                    socket.emit('message_history', history.map(msg => ({
+                        id: msg._id.toString(), text: msg.text, sender: msg.senderUsername,
+                        timestamp: msg.createdAt.toISOString(), status: msg.status
+                    })));
+                } catch (e) { console.error("History Fetch Error:", e); }
+            })();
+        } else {
+            // Memory/Local Mode History
+            const history = localStore.getHistory(canonicalRoomId);
+            socket.emit('message_history', history);
+        }
     });
+
+    // --- Game Handlers ---
+
+    const handleMessageDistribution = async (canonicalRoomId: string, sender: ChatUser, message: string, tempId: string, timestamp: string) => {
+        const msgPayload = {
+            id: tempId,
+            text: message,
+            sender: sender.username,
+            timestamp: timestamp,
+            status: 'sent',
+            roomId: canonicalRoomId
+        };
+
+        // Save to Local Store immediately if no DB (or even if DB fails, but here we treat it as primary for no-DB mode)
+        if (!process.env.MONGO_URI) {
+            localStore.addMessage({
+                id: tempId,
+                roomId: canonicalRoomId,
+                text: message,
+                sender: sender.username,
+                senderId: sender.userId || sender.id,
+                timestamp: timestamp,
+                status: 'sent' as any
+            });
+        }
+
+        // 1. Emit to everyone in the room (standard case)
+        io.to(canonicalRoomId).emit('receive_message', msgPayload);
+
+        // 2. Offline / Out-of-Room Notification Logic for DMs
+        if (canonicalRoomId.startsWith('DM_')) {
+            const parts = canonicalRoomId.replace('DM_', '').split('_');
+            const receiverId = parts.find((id: string) => id.toLowerCase() !== sender.userId?.toLowerCase());
+
+            if (receiverId) {
+                // Find socket by Auth ID
+                const receiverSocketId = userSessions[receiverId] || userSessions[receiverId.toLowerCase()];
+
+                // If receiver is connected
+                if (receiverSocketId) {
+                    io.to(receiverSocketId).emit('receive_message', msgPayload);
+                    io.to(receiverSocketId).emit('new_notification', { roomId: canonicalRoomId });
+                }
+            }
+        }
+    };
 
     socket.on('send_message', async ({ message, roomId }) => {
         const canonicalRoomId = roomId.toUpperCase();
         const user = users[socket.id];
 
-        // Strict check: user must be in the room they are sending to
         if (user && user.roomId === canonicalRoomId) {
-            const msgData = {
-                roomId: canonicalRoomId,
-                senderId: user.userId || socket.id,
-                senderUsername: user.username,
-                text: message,
-                status: 'sent'
-            };
+            const tempId = Math.random().toString(36).substr(2, 9);
+            const timestamp = new Date().toISOString();
 
-            try {
-                const newMsg = new Message(msgData);
-                await newMsg.save();
+            await handleMessageDistribution(canonicalRoomId, user, message, tempId, timestamp);
 
-                io.to(canonicalRoomId).emit('receive_message', {
-                    id: newMsg._id.toString(),
-                    text: newMsg.text,
-                    sender: newMsg.senderUsername,
-                    timestamp: newMsg.createdAt.toISOString(),
-                    status: newMsg.status
-                });
-            } catch (e) {
-                console.error("Msg Save Error", e);
-            }
-        }
-    });
-
-    socket.on('mark_read', async ({ messageId, roomId }) => {
-        const canonicalRoomId = roomId.toUpperCase();
-        try {
-            await Message.findByIdAndUpdate(messageId, { status: 'read' });
-            io.to(canonicalRoomId).emit('message_status_update', { id: messageId, status: 'read' });
-        } catch (e) { }
-    });
-
-    socket.on('get_room_state', ({ roomId }) => {
-        if (typeof roomId === 'string') {
-            const r = rooms[roomId.toUpperCase()];
-            if (r) {
-                socket.emit('room_users_update', r.users);
+            // 2. Persist to DB (Fire and Forget)
+            if (process.env.MONGO_URI) {
+                const msgData = {
+                    roomId: canonicalRoomId, senderId: user.userId || socket.id, senderUsername: user.username,
+                    text: message, status: 'sent', createdAt: timestamp
+                };
+                try {
+                    const newMsg = new Message(msgData);
+                    await newMsg.save();
+                } catch (e) {
+                    console.error("Message Save Error:", e);
+                }
             }
         }
     });
@@ -266,100 +346,229 @@ io.on('connection', (socket) => {
     socket.on('toggle_mute', ({ roomId }) => {
         const canonicalRoomId = roomId.toUpperCase();
         const user = users[socket.id];
-        if (user && user.roomId === canonicalRoomId) {
+        const room = rooms[canonicalRoomId];
+
+        if (user && room) {
             user.isMuted = !user.isMuted;
-            io.to(canonicalRoomId).emit('room_users_update', rooms[canonicalRoomId].users);
+
+            // Sync local room user list if user is in that room
+            const userInRoom = room.users.find(u => u.id === socket.id);
+            if (userInRoom) {
+                userInRoom.isMuted = user.isMuted;
+            }
+
+            io.to(canonicalRoomId).emit('room_users_update', room.users);
         }
     });
 
+    socket.on('mark_read', async ({ messageId, roomId }) => {
+        // Echo the read status safely
+        if (roomId) {
+            io.to(roomId.toUpperCase()).emit('message_status_update', { id: messageId, status: 'read' });
+        }
+
+        // Update Local Store
+        if (!process.env.MONGO_URI) {
+            localStore.markRead(messageId);
+        }
+
+        // Update DB if available
+        if (process.env.MONGO_URI && messageId && !messageId.includes('.')) {
+            try {
+                await Message.findByIdAndUpdate(messageId, { status: 'read' });
+            } catch (e) { }
+        }
+    });
+
+    // --- Signaling / WebRTC / Calls ---
 
     socket.on('webrtc_ready', ({ roomId }) => {
-        // Assume roomId comes correct or use user.roomId?
-        // Safer to use user.roomId
-        const user = users[socket.id];
-        if (user && user.roomId) {
-            socket.broadcast.to(user.roomId).emit('webrtc_ready', { id: socket.id });
-        }
+        const u = users[socket.id];
+        if (u && u.roomId) socket.broadcast.to(u.roomId).emit('webrtc_ready', { id: socket.id });
     });
 
     socket.on('signal', ({ targetId, signal }) => {
         io.to(targetId).emit('signal', { senderId: socket.id, signal });
     });
 
-    // --- Call Features (1-1) ---
-    // --- Call Features (1-1) ---
     socket.on('initiate_call', ({ roomId, callerName, callerUserId }) => {
         const canonicalRoomId = roomId.toUpperCase();
 
-        // Strategy 1: Broadcast to room (works if user is IN the room)
-        socket.broadcast.to(canonicalRoomId).emit('incoming_call', {
-            callerId: socket.id,
-            callerName,
-            roomId
-        });
+        // Broadcast to room (good for group calls or finding socket)
+        socket.broadcast.to(canonicalRoomId).emit('incoming_call', { callerId: socket.id, callerName, roomId });
 
-        // Strategy 2: Direct message if it's a DM and user is elsewhere (Home Screen)
-        // Format: DM_USER1_USER2 (Sorted)
+        // Targeted Call Logic (for DMs)
         if (canonicalRoomId.startsWith('DM_') && callerUserId) {
             const parts = canonicalRoomId.replace('DM_', '').split('_');
-            // Compare case-insensitively
             const receiverIdUpper = parts.find((id: string) => id.toLowerCase() !== callerUserId.toLowerCase());
 
-            console.log(`[Call Debug] Caller: ${callerUserId}, Room: ${canonicalRoomId}`);
-            console.log(`[Call Debug] Parts: ${JSON.stringify(parts)}, Receiver Calculated (Upper): ${receiverIdUpper}`);
-            console.log(`[Call Debug] UserSessions Keys: ${Object.keys(userSessions).length} keys`);
-
             if (receiverIdUpper) {
-                const receiverId = receiverIdUpper.toLowerCase();
-                const receiverSocketId = userSessions[receiverId] || userSessions[receiverIdUpper];
-                console.log(`[Call Debug] Receiver Socket ID: ${receiverSocketId}`);
-                console.log(`[Call Logic] DM Call from ${callerUserId} to ${receiverId}. Target Socket: ${receiverSocketId}`);
-
-                // Need to check if receiverSocketId is actually connected
+                // Try finding by Auth ID first
+                const receiverSocketId = userSessions[receiverIdUpper.toLowerCase()] || userSessions[receiverIdUpper];
                 if (receiverSocketId && receiverSocketId !== socket.id) {
-                    io.to(receiverSocketId).emit('incoming_call', {
-                        callerId: socket.id,
-                        callerName,
-                        roomId // Send roomId so they know which room to join
-                    });
+                    io.to(receiverSocketId).emit('incoming_call', { callerId: socket.id, callerName, roomId });
                 }
             }
         }
     });
 
     socket.on('accept_call', ({ roomId }) => {
-        const canonicalRoomId = roomId.toUpperCase();
-        socket.broadcast.to(canonicalRoomId).emit('call_accepted');
+        socket.broadcast.to(roomId.toUpperCase()).emit('call_accepted');
     });
 
     socket.on('decline_call', ({ roomId }) => {
-        const canonicalRoomId = roomId.toUpperCase();
-        socket.broadcast.to(canonicalRoomId).emit('call_declined');
+        socket.broadcast.to(roomId.toUpperCase()).emit('call_declined');
     });
 
     socket.on('end_call', ({ roomId }) => {
-        const canonicalRoomId = roomId.toUpperCase();
-        socket.broadcast.to(canonicalRoomId).emit('call_ended');
+        socket.broadcast.to(roomId.toUpperCase()).emit('call_ended');
     });
-    // ---------------------------
+
+    // --- Game Handlers ---
+
+    socket.on('start_game', ({ roomId, gameType, players }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        const room = rooms[canonicalRoomId];
+        const user = users[socket.id];
+
+        if (room && user && user.isHost && user.roomId === canonicalRoomId) {
+            if (gameType === 'tictactoe') {
+                room.game = {
+                    type: 'tictactoe',
+                    state: {
+                        board: Array(9).fill(null),
+                        turn: players[0].id,
+                        players: players,
+                        winner: null,
+                        draw: false,
+                        lastMoveTime: Date.now()
+                    }
+                };
+                resetGameTimer(room, canonicalRoomId, players[0].id);
+            }
+            io.to(canonicalRoomId).emit('game_started', getSafeGame(room.game));
+        } else {
+            console.log("Start Game Failed: Permission denied or room not found");
+        }
+    });
+
+    socket.on('restart_game', ({ roomId }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        const room = rooms[canonicalRoomId];
+        const user = users[socket.id];
+
+        if (room && room.game && user && user.isHost) {
+            const players = room.game.state.players;
+            room.game.state.board = Array(9).fill(null);
+            room.game.state.winner = null;
+            room.game.state.draw = false;
+            room.game.state.turn = players[0].id;
+            room.game.state.lastMoveTime = Date.now();
+            resetGameTimer(room, canonicalRoomId, players[0].id);
+            io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
+        }
+    });
+
+    socket.on('end_game', ({ roomId }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        const room = rooms[canonicalRoomId];
+        const user = users[socket.id];
+        if (room && user && user.isHost) {
+            if (room.game && room.game.timer) clearTimeout(room.game.timer);
+            delete room.game;
+            io.to(canonicalRoomId).emit('game_ended');
+        }
+    });
+
+    socket.on('make_move', ({ roomId, index }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        const room = rooms[canonicalRoomId];
+
+        // Validation
+        if (!room || !room.game || room.game.state.winner || room.game.state.draw) return;
+
+        const game = room.game.state;
+        if (game.turn !== socket.id) return;
+        if (game.board[index] !== null) return;
+
+        // Execute Move
+        const player = game.players.find((p: any) => p.id === socket.id);
+        if (!player) return;
+
+        game.board[index] = player.symbol;
+        const winnerSymbol = checkWinner(game.board);
+
+        // Check Status
+        if (winnerSymbol === player.symbol) {
+            game.winner = socket.id;
+            if (room.game && room.game.timer) clearTimeout(room.game.timer);
+        } else if (winnerSymbol === 'draw') {
+            game.draw = true;
+            if (room.game && room.game.timer) clearTimeout(room.game.timer);
+        } else {
+            const nextIdx = (game.players.findIndex((p: any) => p.id === socket.id) + 1) % game.players.length;
+            game.turn = game.players[nextIdx].id;
+            resetGameTimer(room, canonicalRoomId, game.turn);
+        }
+
+        io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
+
+        // AI Logic
+        if (!game.winner && !game.draw && game.turn === 'AI') {
+            const aiPlayer = game.players.find((p: any) => p.id === 'AI');
+            setTimeout(() => {
+                // Re-validate state inside timeout
+                if (!room || !room.game || room.game.state.winner || room.game.state.draw) return;
+
+                const currentGame = room.game.state; // Use fresh reference if needed (though it's same object)
+                const bestMove = getBestMove(currentGame.board, aiPlayer.symbol);
+                if (bestMove !== -1) {
+                    currentGame.board[bestMove] = aiPlayer.symbol;
+                    const w = checkWinner(currentGame.board);
+
+                    if (w === aiPlayer.symbol) {
+                        currentGame.winner = 'AI';
+                        if (room.game && room.game.timer) clearTimeout(room.game.timer);
+                    } else if (w === 'draw') {
+                        currentGame.draw = true;
+                        if (room.game && room.game.timer) clearTimeout(room.game.timer);
+                    } else {
+                        const next = (currentGame.players.findIndex((p: any) => p.id === 'AI') + 1) % currentGame.players.length;
+                        currentGame.turn = currentGame.players[next].id;
+                        resetGameTimer(room, canonicalRoomId, currentGame.turn);
+                    }
+                    io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
+                }
+            }, 600);
+        }
+    });
+
 
     socket.on('disconnect', () => {
         const user = users[socket.id];
         if (user && user.roomId) {
-            const room = rooms[user.roomId]; // user.roomId is already uppercase from join_room
+            const room = rooms[user.roomId];
             if (room) {
                 room.users = room.users.filter(u => u.id !== socket.id);
-
                 io.to(room.id).emit('user_left', { username: user.username, id: socket.id });
                 io.to(room.id).emit('room_users_update', room.users);
+
+                // Game cleanup if player leaves
+                if (room.game && room.game.state.players.some((p: any) => p.id === socket.id)) {
+                    if (room.game.timer) clearTimeout(room.game.timer);
+                    delete room.game;
+                    io.to(room.id).emit('game_ended');
+                }
 
                 if (room.users.length === 0) {
                     delete rooms[room.id];
                 } else if (user.isHost) {
-                    // Assign new host
-                    room.users[0].isHost = true;
-                    room.hostId = room.users[0].id;
-                    io.to(room.id).emit('room_users_update', room.users);
+                    // Reassign Host
+                    if (room.users[0]) {
+                        room.users[0].isHost = true;
+                        room.hostId = room.users[0].id;
+                        io.to(room.id).emit('room_users_update', room.users);
+                    }
                 }
             }
         }
@@ -368,6 +577,6 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(PORT, () => {
+server.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT}`);
 });

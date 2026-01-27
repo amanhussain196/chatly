@@ -1,0 +1,56 @@
+[
+  {
+    "id": "hay5eubfv",
+    "roomId": "DM_6975EFDF103D6EADD8B0108E_6976610F838419F3B41183B4",
+    "text": "csacs",
+    "sender": "amn",
+    "senderId": "6975efdf103d6eadd8b0108e",
+    "timestamp": "2026-01-27T06:21:59.762Z",
+    "status": "sent"
+  },
+  {
+    "id": "k7j538mtu",
+    "roomId": "DM_6975EFDF103D6EADD8B0108E_6976610F838419F3B41183B4",
+    "text": "hey",
+    "sender": "amn",
+    "senderId": "6975efdf103d6eadd8b0108e",
+    "timestamp": "2026-01-27T06:22:23.104Z",
+    "status": "read"
+  },
+  {
+    "id": "k68qcxj9o",
+    "roomId": "DM_6975EFDF103D6EADD8B0108E_6976610F838419F3B41183B4",
+    "text": "xsaxas",
+    "sender": "amn1",
+    "senderId": "6976610f838419f3b41183b4",
+    "timestamp": "2026-01-27T06:22:40.747Z",
+    "status": "read"
+  },
+  {
+    "id": "o6aoekcji",
+    "roomId": "DM_6975EFDF103D6EADD8B0108E_6976610F838419F3B41183B4",
+    "text": "asxasxasxasxaasxas",
+    "sender": "amn",
+    "senderId": "6975efdf103d6eadd8b0108e",
+    "timestamp": "2026-01-27T06:22:59.432Z",
+    "status": "sent"
+  },
+  {
+    "id": "bd6p21h1y",
+    "roomId": "DM_6975EFDF103D6EADD8B0108E_6976610F838419F3B41183B4",
+    "text": "hey",
+    "sender": "amn",
+    "senderId": "6975efdf103d6eadd8b0108e",
+    "timestamp": "2026-01-27T06:39:27.700Z",
+    "status": "sent"
+  },
+  {
+    "id": "6cazw6mru",
+    "roomId": "DM_6975EFDF103D6EADD8B0108E_6976610F838419F3B41183B4",
+    "text": "hello",
+    "sender": "amn",
+    "senderId": "6975efdf103d6eadd8b0108e",
+    "timestamp": "2026-01-27T06:41:41.388Z",
+    "status": "sent"
+  }
+]

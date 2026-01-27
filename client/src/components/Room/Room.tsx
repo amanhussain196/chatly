@@ -899,8 +899,27 @@ const Room = () => {
                 )}
             </div>
 
+            {/* Audio Elements for WebRTC Peers */}
+            {peers.map((peer) => (
+                <AudioPlayer key={peer.peerID} stream={peer.stream} />
+            ))}
+
         </div >
     );
+};
+
+// Audio Player Component
+const AudioPlayer: React.FC<{ stream: MediaStream | null }> = ({ stream }) => {
+    const audioRef = React.useRef<HTMLAudioElement>(null);
+
+    React.useEffect(() => {
+        if (audioRef.current && stream) {
+            audioRef.current.srcObject = stream;
+            audioRef.current.play().catch(err => console.error('Audio play error:', err));
+        }
+    }, [stream]);
+
+    return <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />;
 };
 
 export default Room;

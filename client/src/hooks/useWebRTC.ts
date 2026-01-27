@@ -47,7 +47,15 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
         const initWebRTC = async () => {
             try {
                 addLog('Requesting user media...');
-                const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: false,
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        sampleRate: 48000
+                    }
+                });
                 if (isCancelled) {
                     stream.getTracks().forEach(t => t.stop());
                     return;

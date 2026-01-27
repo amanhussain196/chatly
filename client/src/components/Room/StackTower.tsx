@@ -198,7 +198,8 @@ const StackTower: React.FC<StackTowerProps> = ({ gameState, socket, roomId, curr
     }, [myGameOver, gameState.winner, myScore, myWidth, localHistory, opponent, amIP1]);
 
     // Handle Tap / Click
-    const handleTap = () => {
+    const handleTap = (e: React.MouseEvent | React.TouchEvent) => {
+        e.preventDefault(); // Prevent double firing on mobile
         if (myGameOver || gameState.winner || me.status === 'gameover') return;
         if (!socket) return;
 
@@ -265,9 +266,9 @@ const StackTower: React.FC<StackTowerProps> = ({ gameState, socket, roomId, curr
             )}
 
             <div
-                style={{ width: '100%', maxWidth: '500px', height: '100%', cursor: 'pointer' }}
-                onMouseDown={handleTap}
-                onTouchStart={handleTap}
+                style={{ width: '100%', maxWidth: '500px', height: '100%', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'none' }}
+                onClick={handleTap}
+                onTouchEnd={handleTap}
             >
                 <canvas
                     ref={canvasRef}

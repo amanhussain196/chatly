@@ -64,7 +64,7 @@ interface ChatRoom {
         isPrivate: boolean;
     };
     game?: {
-        type: 'tictactoe';
+        type: 'tictactoe' | 'pingpong' | 'stacktower';
         state: any;
         timer?: any; // NodeJS.Timeout
     };
@@ -176,6 +176,84 @@ const resetGameTimer = (room: any, roomId: string, turnPlayerId: string) => {
 };
 
 
+
+// --- Ping Pong Logic ---
+const PADDLE_HEIGHT = 100;
+const PADDLE_WIDTH = 10;
+const BALL_SIZE = 10;
+const BOARD_WIDTH = 800;
+const BOARD_HEIGHT = 600;
+const PADDLE_SPEED = 20;
+
+const resetBall = (state: any) => {
+    state.ball.x = BOARD_WIDTH / 2;
+    state.ball.y = BOARD_HEIGHT / 2;
+    state.ball.dx = (Math.random() > 0.5 ? 1 : -1) * (4.5 + state.difficulty);
+    state.ball.dy = (Math.random() > 0.5 ? 1 : -1) * (4.5 + state.difficulty);
+};
+
+const updatePingPong = (roomId: string) => {
+    const room = rooms[roomId];
+    if (!room || !room.game || room.game.type !== 'pingpong') return;
+
+    const state = room.game.state;
+    if (state.status !== 'playing') return;
+
+    // Move Ball
+    state.ball.x += state.ball.dx;
+    state.ball.y += state.ball.dy;
+
+    // Wall Collisions (Top/Bottom)
+    if (state.ball.y <= 0 || state.ball.y >= BOARD_HEIGHT - BALL_SIZE) {
+        state.ball.dy *= -1;
+    }
+
+    // Paddles
+    // Player 1 (Left) - x = 20
+    if (state.ball.x <= 30 && state.ball.x >= 20 &&
+        state.ball.y + BALL_SIZE >= state.players[0].y &&
+        state.ball.y <= state.players[0].y + PADDLE_HEIGHT) {
+        state.ball.dx *= -1;
+        state.ball.dx += (state.ball.dx > 0 ? 0.5 : -0.5); // Increase speed slightly
+        state.difficulty += 0.1;
+    }
+
+    // Player 2 (Right) - x = BOARD_WIDTH - 30
+    if (state.ball.x >= BOARD_WIDTH - 40 && state.ball.x <= BOARD_WIDTH - 30 &&
+        state.ball.y + BALL_SIZE >= state.players[1].y &&
+        state.ball.y <= state.players[1].y + PADDLE_HEIGHT) {
+        state.ball.dx *= -1;
+        state.ball.dx += (state.ball.dx > 0 ? 0.5 : -0.5); // Increase speed slightly
+        state.difficulty += 0.1;
+    }
+
+    // Scoring
+    if (state.ball.x < 0) {
+        // P2 Scored (P1 lost life)
+        state.players[0].lives -= 1;
+        resetBall(state);
+        if (state.players[0].lives <= 0) {
+            state.status = 'ended';
+            state.winner = state.players[1].id;
+        }
+    } else if (state.ball.x > BOARD_WIDTH) {
+        // P1 Scored (P2 lost life)
+        state.players[1].lives -= 1;
+        resetBall(state);
+        if (state.players[1].lives <= 0) {
+            state.status = 'ended';
+            state.winner = state.players[0].id;
+        }
+    }
+
+    // Send Update
+    io.to(roomId).emit('game_update', getSafeGame(room.game));
+
+    if (state.status === 'ended') {
+        clearInterval(room.game.timer);
+    }
+};
+
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
@@ -234,10 +312,16 @@ io.on('connection', (socket) => {
 
         // Host logic for rejoin
         let isHost = room.users.length === 0;
-        if (userId && !userId.startsWith('guest-')) {
+        if (userId) { // Allow guests to rejoin/replace too now that we have stable IDs
             const existingUserIndex = room.users.findIndex(u => u.userId === userId);
             if (existingUserIndex !== -1) {
                 if (room.users[existingUserIndex].isHost) isHost = true;
+
+                // Remove the OLD socket session for this user
+                const oldSocketId = room.users[existingUserIndex].id;
+                // Optional: Force disconnect logic for the old socket if needed?
+                // For now, just remove from room list
+
                 room.users.splice(existingUserIndex, 1);
             }
         }
@@ -432,6 +516,8 @@ io.on('connection', (socket) => {
         const user = users[socket.id];
 
         if (room && user && user.isHost && user.roomId === canonicalRoomId) {
+            if (room.game && room.game.timer) clearTimeout(room.game.timer); // Clear existing
+
             if (gameType === 'tictactoe') {
                 room.game = {
                     type: 'tictactoe',
@@ -445,10 +531,93 @@ io.on('connection', (socket) => {
                     }
                 };
                 resetGameTimer(room, canonicalRoomId, players[0].id);
+            } else if (gameType === 'pingpong') {
+                room.game = {
+                    type: 'pingpong',
+                    state: {
+                        players: players.map((p: any) => ({ ...p, lives: 3, y: BOARD_HEIGHT / 2 - PADDLE_HEIGHT / 2 })),
+                        ball: { x: BOARD_WIDTH / 2, y: BOARD_HEIGHT / 2, dx: 0, dy: 0 },
+                        dimensions: { width: BOARD_WIDTH, height: BOARD_HEIGHT },
+                        status: 'playing',
+                        difficulty: 0,
+                        winner: null
+                    },
+                    timer: setInterval(() => updatePingPong(canonicalRoomId), 15)
+                };
+                resetBall(room.game.state);
+            } else if (gameType === 'stacktower') {
+                room.game = {
+                    type: 'stacktower',
+                    state: {
+                        players: players.map((p: any) => ({
+                            ...p,
+                            score: 0,
+                            width: 300,
+                            status: 'playing',
+                            history: [] // Stores placed blocks { width, offset }
+                        })),
+                        winner: null
+                    }
+                };
             }
+
             io.to(canonicalRoomId).emit('game_started', getSafeGame(room.game));
         } else {
             console.log("Start Game Failed: Permission denied or room not found");
+        }
+    });
+
+    socket.on('paddle_move', ({ roomId, y }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        const room = rooms[canonicalRoomId];
+        if (!room || !room.game || room.game.type !== 'pingpong') return;
+
+        const player = room.game.state.players.find((p: any) => p.id === socket.id);
+        if (player) {
+            // Clamp Position
+            player.y = Math.max(0, Math.min(BOARD_HEIGHT - PADDLE_HEIGHT, y));
+        }
+    });
+
+    socket.on('stack_place', ({ roomId, width, offset, score, gameOver }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        const room = rooms[canonicalRoomId];
+        if (!room || !room.game || room.game.type !== 'stacktower') return;
+
+        const player = room.game.state.players.find((p: any) => p.id === socket.id);
+        const opponent = room.game.state.players.find((p: any) => p.id !== socket.id);
+
+        if (player) {
+            player.width = width;
+            player.score = score;
+            if (gameOver) player.status = 'gameover';
+            player.history.push({ width, offset });
+
+            // Check Winner (If I am game over, did opponent already lose?)
+            if (gameOver) {
+                if (opponent.status === 'gameover') {
+                    // Both lost, compare scores
+                    if (player.score > opponent.score) room.game.state.winner = player.id;
+                    else if (opponent.score > player.score) room.game.state.winner = opponent.id;
+                    else room.game.state.winner = 'draw';
+                } else {
+                    // I lost, pending opponent failure? Or typically instant loss in VS mode?
+                    // User said "Whoever places more blocks". So we wait for both to fail? 
+                    // Let's assume unlimited play until failure. If one fails, the other can keep playing to beat the score.
+                    // If opponent is already gameover and has higher score, they win.
+                    if (opponent.status === 'gameover' && opponent.score > player.score) {
+                        room.game.state.winner = opponent.id;
+                    }
+                    // If opponent is still playing, no winner yet.
+                }
+            } else {
+                // Check if I just surpassed a 'dead' opponent? (Optional instant win)
+                if (opponent.status === 'gameover' && player.score > opponent.score) {
+                    room.game.state.winner = player.id;
+                }
+            }
+
+            io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
         }
     });
 
@@ -459,13 +628,37 @@ io.on('connection', (socket) => {
 
         if (room && room.game && user && user.isHost) {
             const players = room.game.state.players;
-            room.game.state.board = Array(9).fill(null);
-            room.game.state.winner = null;
-            room.game.state.draw = false;
-            room.game.state.turn = players[0].id;
-            room.game.state.lastMoveTime = Date.now();
-            resetGameTimer(room, canonicalRoomId, players[0].id);
-            io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
+            if (room.game.timer) {
+                clearTimeout(room.game.timer); // Clear TTT timeout
+                clearInterval(room.game.timer); // Clear PingPong interval
+            }
+
+            if (room.game.type === 'tictactoe') {
+                room.game.state.board = Array(9).fill(null);
+                room.game.state.winner = null;
+                room.game.state.draw = false;
+                room.game.state.turn = players[0].id;
+                room.game.state.lastMoveTime = Date.now();
+                resetGameTimer(room, canonicalRoomId, players[0].id);
+                io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
+            } else if (room.game.type === 'pingpong') {
+                room.game.state.winner = null;
+                room.game.state.status = 'playing';
+                room.game.state.difficulty = 0;
+                room.game.state.players.forEach((p: any) => { p.lives = 3; p.y = BOARD_HEIGHT / 2 - PADDLE_HEIGHT / 2; });
+                resetBall(room.game.state);
+                room.game.timer = setInterval(() => updatePingPong(canonicalRoomId), 15);
+                io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
+            } else if (room.game.type === 'stacktower') {
+                room.game.state.winner = null;
+                room.game.state.players.forEach((p: any) => {
+                    p.score = 0;
+                    p.width = 300;
+                    p.status = 'playing';
+                    p.history = [];
+                });
+                io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
+            }
         }
     });
 
@@ -474,9 +667,14 @@ io.on('connection', (socket) => {
         const room = rooms[canonicalRoomId];
         const user = users[socket.id];
         if (room && user && user.isHost) {
-            if (room.game && room.game.timer) clearTimeout(room.game.timer);
-            delete room.game;
-            io.to(canonicalRoomId).emit('game_ended');
+            if (room.game) {
+                if (room.game.timer) {
+                    clearTimeout(room.game.timer);
+                    clearInterval(room.game.timer);
+                }
+                delete room.game;
+                io.to(canonicalRoomId).emit('game_ended');
+            }
         }
     });
 
@@ -555,7 +753,10 @@ io.on('connection', (socket) => {
 
                 // Game cleanup if player leaves
                 if (room.game && room.game.state.players.some((p: any) => p.id === socket.id)) {
-                    if (room.game.timer) clearTimeout(room.game.timer);
+                    if (room.game.timer) {
+                        clearTimeout(room.game.timer);
+                        clearInterval(room.game.timer);
+                    }
                     delete room.game;
                     io.to(room.id).emit('game_ended');
                 }

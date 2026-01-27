@@ -52,11 +52,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
 
             // Check for guest if no logged in user
-            const guestUser = sessionStorage.getItem('guest_username');
-            if (!token && guestUser) {
+            const guestUsername = sessionStorage.getItem('guest_username');
+            const guestId = sessionStorage.getItem('guest_id');
+
+            if (!token && guestUsername) {
+                const id = guestId || 'guest-' + Math.random().toString(36).substr(2, 9);
+                if (!guestId) sessionStorage.setItem('guest_id', id);
+
                 setUser({
-                    id: 'guest-' + Math.random().toString(36).substr(2, 9),
-                    username: guestUser,
+                    id: id,
+                    username: guestUsername,
                     email: ''
                 });
             }
@@ -75,12 +80,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const loginGuest = (username: string) => {
+        const id = 'guest-' + Math.random().toString(36).substr(2, 9);
         const guestUser = {
-            id: 'guest-' + Math.random().toString(36).substr(2, 9),
+            id,
             username,
             email: ''
         };
         sessionStorage.setItem('guest_username', username);
+        sessionStorage.setItem('guest_id', id);
         setUser(guestUser);
     };
 

@@ -8,6 +8,8 @@ import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import { Mic, MicOff, Send, PhoneOff, Copy, User as UserIcon, Phone, PhoneIncoming, X, Check, Gamepad2 } from 'lucide-react';
 import TicTacToe from './TicTacToe';
+import PingPong from './PingPong';
+import StackTower from './StackTower';
 
 
 interface User {
@@ -689,13 +691,41 @@ const Room = () => {
 
                 {/* Game Overlay */}
                 {roomGame && roomGame.type === 'tictactoe' && currentUser && (
-                    <TicTacToe
-                        gameState={roomGame.state}
-                        socket={socket}
-                        roomId={roomId || ''}
-                        currentUserId={currentUser.id}
-                        isHost={currentUser.isHost}
-                    />
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 50 }}>
+                        <TicTacToe
+                            gameState={roomGame.state}
+                            socket={socket}
+                            roomId={roomId || ''}
+                            currentUserId={currentUser.id}
+                            isHost={currentUser.isHost}
+                        />
+                    </div>
+                )}
+
+                {/* Ping Pong Overlay */}
+                {roomGame && roomGame.type === 'pingpong' && currentUser && (
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 50 }}>
+                        <PingPong
+                            gameState={roomGame.state}
+                            socket={socket}
+                            roomId={roomId || ''}
+                            currentUserId={currentUser.id}
+                            isHost={currentUser.isHost}
+                        />
+                    </div>
+                )}
+
+                {/* Stack Tower Overlay */}
+                {roomGame && roomGame.type === 'stacktower' && currentUser && (
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 50 }}>
+                        <StackTower
+                            gameState={roomGame.state}
+                            socket={socket}
+                            roomId={roomId || ''}
+                            currentUserId={currentUser.id}
+                            isHost={currentUser.isHost}
+                        />
+                    </div>
                 )}
 
                 {/* Debug Logs */}
@@ -783,6 +813,20 @@ const Room = () => {
                             >
                                 <Gamepad2 size={24} />
                                 Tic Tac Toe
+                            </button>
+                            <button
+                                onClick={() => handleGameSelect('pingpong')}
+                                style={{ width: '100%', padding: '16px', background: '#3b82f6', border: 'none', borderRadius: '8px', color: 'white', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.1rem', marginTop: '10px' }}
+                            >
+                                <Gamepad2 size={24} />
+                                Ping Pong (Beta)
+                            </button>
+                            <button
+                                onClick={() => handleGameSelect('stacktower')}
+                                style={{ width: '100%', padding: '16px', background: '#8b5cf6', border: 'none', borderRadius: '8px', color: 'white', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.1rem', marginTop: '10px' }}
+                            >
+                                <Gamepad2 size={24} />
+                                Stack Tower (New)
                             </button>
                         </div>
                     </div>

@@ -279,8 +279,10 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
                             peerID: userToSignal,
                             peer: newPeer,
                             stream: null,
-                            connectionState: 'connecting'
+                            connectionState: 'connecting',
+                            isInitiator: true
                         };
+
                         setPeers([...peersRef.current]);
                     }
                 }

@@ -21,6 +21,7 @@ const authMiddleware = async (req: any, res: any, next: any) => {
 
 // Send Friend Request
 router.post('/request', authMiddleware, async (req: any, res) => {
+    if (!process.env.MONGO_URI) return res.status(503).json({ message: 'Feature unavailable in Guest Mode' });
     try {
         const { username } = req.body;
         const senderId = req.userId;
@@ -53,6 +54,7 @@ router.post('/request', authMiddleware, async (req: any, res) => {
 
 // Accept Friend Request
 router.post('/accept', authMiddleware, async (req: any, res) => {
+    if (!process.env.MONGO_URI) return res.status(503).json({ message: 'Feature unavailable in Guest Mode' });
     try {
         const { requesterId } = req.body; // The person who sent the request
         const userId = req.userId; // The person accepting it
@@ -103,6 +105,11 @@ router.post('/decline', authMiddleware, async (req: any, res) => {
 
 // Get Friends & Requests
 router.get('/', authMiddleware, async (req: any, res) => {
+    if (!process.env.MONGO_URI) {
+        // Return empty structure in guest mode so UI doesn't break
+        res.json({ friends: [], requests: [] });
+        return;
+    }
     try {
         const user = await User.findById(req.userId)
             .populate('friends', 'username email _id')

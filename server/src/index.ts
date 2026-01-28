@@ -499,6 +499,10 @@ io.on('connection', (socket) => {
         io.to(targetId).emit('signal', { senderId: socket.id, signal });
     });
 
+    socket.on('request_reconnect', ({ targetId }: { targetId: string }) => {
+        io.to(targetId).emit('request_reconnect', { requesterId: socket.id });
+    });
+
     socket.on('initiate_call', ({ roomId, callerName, callerUserId }) => {
         const canonicalRoomId = roomId.toUpperCase();
 

@@ -32,30 +32,62 @@ const AuthContext = createContext<AuthContextProps>({
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState<User | null>(() => {
+        try {
+            const savedUser = localStorage.getItem('user_data');
+            return savedUser ? JSON.parse(savedUser) : null;
+        } catch (e) {
+            return null;
+        }
+    });
+
     const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-    const [isLoading, setIsLoading] = useState(true);
+    // If we have a cached user and token, we are not "loading" in the blocking sense
+    const [isLoading, setIsLoading] = useState(!user && !!token);
 
     useEffect(() => {
         const initAuth = async () => {
-            if (token) {
-                try {
-                    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-                    const res = await axios.get(`${API_URL}/api/auth/me`);
-                    setUser(res.data.user);
-                } catch (err) {
-                    // Start of modification: Don't auto logout if token fails, check guest
-                    localStorage.removeItem('token');
-                    setToken(null);
-                    delete axios.defaults.headers.common['Authorization'];
+            // Set a timeout for the entire auth process to prevent indefinite loading
+            const authTimeout = setTimeout(() => {
+                console.warn('[Auth] Auth initialization timeout, proceeding...');
+                setIsLoading(false);
+            }, 5000); // 5 second timeout
+
+            try {
+                if (token) {
+                    try {
+                        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+                        // Add timeout to the API call
+                        const res = await axios.get(`${API_URL}/api/auth/me`, {
+                            timeout: 3000 // 3 second timeout for API call
+                        });
+
+                        setUser(res.data.user);
+                        localStorage.setItem('user_data', JSON.stringify(res.data.user));
+                    } catch (err: any) {
+                        console.error("Auth check failed:", err.message);
+
+                        // Only logout if it's an authentication error (401/403)
+                        // If it's a network error, keep the cached user
+                        if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+                            localStorage.removeItem('token');
+                            localStorage.removeItem('user_data');
+                            setToken(null);
+                            setUser(null);
+                            delete axios.defaults.headers.common['Authorization'];
+                        }
+                    }
                 }
+            } finally {
+                clearTimeout(authTimeout);
             }
 
-            // Check for guest if no logged in user
+            // Check for guest if no logged in user (and no cached user)
             const guestUsername = sessionStorage.getItem('guest_username');
             const guestId = sessionStorage.getItem('guest_id');
 
-            if (!token && guestUsername) {
+            if (!token && !user && guestUsername) {
                 const id = guestId || 'guest-' + Math.random().toString(36).substr(2, 9);
                 if (!guestId) sessionStorage.setItem('guest_id', id);
 
@@ -73,6 +105,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const login = (newToken: string, newUser: User) => {
         localStorage.setItem('token', newToken);
+        localStorage.setItem('user_data', JSON.stringify(newUser));
         sessionStorage.removeItem('guest_username'); // Clear guest if logging in
         setToken(newToken);
         setUser(newUser);
@@ -93,6 +126,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const logout = () => {
         localStorage.removeItem('token');
+        localStorage.removeItem('user_data');
         sessionStorage.removeItem('guest_username');
         setToken(null);
         setUser(null);

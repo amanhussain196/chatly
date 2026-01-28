@@ -8,13 +8,17 @@ const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_change_me_in_prod';
 
 // Register
 router.post('/register', async (req, res) => {
+    if (!process.env.MONGO_URI) {
+        res.status(503).json({ message: 'Database not configured. Please use Guest Mode.' });
+        return;
+    }
     try {
         const { username, email, password } = req.body;
 
         // Basic validation
         if (!username || !email || !password) {
             res.status(400).json({ message: 'All fields are required' });
-            return; // Add return to stop execution
+            return;
         }
 
         // Check exists
@@ -46,6 +50,10 @@ router.post('/register', async (req, res) => {
 
 // Login
 router.post('/login', async (req, res) => {
+    if (!process.env.MONGO_URI) {
+        res.status(503).json({ message: 'Database not configured. Please use Guest Mode.' });
+        return;
+    }
     try {
         const { identifier, password } = req.body; // identifier = email or username
 
@@ -101,6 +109,12 @@ router.post('/check-availability', async (req, res) => {
 
 // Validate Token (Auto-login)
 router.get('/me', async (req, res) => {
+    if (!process.env.MONGO_URI) {
+        // Return 401 to force client to clear the invalid token and logout
+        // 503 would keep them in limbo if they have a token
+        res.status(401).json({ message: 'Database not configured.' });
+        return;
+    }
     try {
         const token = req.headers.authorization?.split(' ')[1];
         if (!token) {

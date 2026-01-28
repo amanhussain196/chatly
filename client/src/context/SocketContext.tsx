@@ -29,6 +29,11 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         const newSocket = io(SOCKET_URL, {
             transports: ['websocket'],
             autoConnect: true,
+            reconnection: true,
+            reconnectionDelay: 500,
+            reconnectionDelayMax: 2000,
+            reconnectionAttempts: 5,
+            timeout: 10000, // 10 second connection timeout
         });
 
         newSocket.on('connect', () => {
@@ -44,6 +49,14 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         newSocket.on('disconnect', () => {
             console.log('Disconnected from socket server');
             setIsConnected(false);
+        });
+
+        newSocket.on('connect_error', (error) => {
+            console.error('[Socket] Connection error:', error.message);
+        });
+
+        newSocket.on('connect_timeout', () => {
+            console.warn('[Socket] Connection timeout');
         });
 
         setSocket(newSocket);

@@ -110,9 +110,9 @@ const Audio = ({ peer, stream }: { peer?: SimplePeer.Instance, stream: MediaStre
             } catch (e: any) {
                 console.error(`[Audio] Audio play failed (attempt ${retryCount + 1}):`, e.message);
 
-                // Retry with exponential backoff
+                // Retry with exponential backoff (faster initial retries)
                 if (retryCount < maxRetries) {
-                    const delay = Math.min(300 * Math.pow(1.5, retryCount), 3000);
+                    const delay = Math.min(200 * Math.pow(1.3, retryCount), 2000); // Faster retries
                     console.log(`[Audio] Retrying in ${delay}ms...`);
 
                     setTimeout(() => {

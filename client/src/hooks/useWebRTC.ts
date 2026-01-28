@@ -103,10 +103,16 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
 
                 socket.on('signal', (payload: { senderId: string, signal: any }) => {
                     const item = peersRef.current.find(p => p.peerID === payload.senderId);
-                    if (item) {
+                    // If peer exists but is failed/destroyed, we might want to replace it
+                    if (item && !item.peer.destroyed) {
                         item.peer.signal(payload.signal);
                     } else {
-                        addLog(`Received signal from new peer: ${payload.senderId}`);
+                        // If it existed but was destroyed, remove it first (cleanly)
+                        if (item) {
+                            peersRef.current = peersRef.current.filter(p => p.peerID !== payload.senderId);
+                        }
+
+                        addLog(`Received signal from new/reconnecting peer: ${payload.senderId}`);
                         const peer = addPeer(payload.signal, payload.senderId, stream);
                         const peerObj: Peer = {
                             peerID: payload.senderId,
@@ -116,6 +122,35 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
                         };
                         peersRef.current.push(peerObj);
                         setPeers([...peersRef.current]);
+                    }
+                });
+
+                socket.on('request_reconnect', ({ requesterId }: { requesterId: string }) => {
+                    addLog(`Received reconnect request from ${requesterId}`);
+                    const index = peersRef.current.findIndex(p => p.peerID === requesterId);
+
+                    if (index > -1) {
+                        const oldPeer = peersRef.current[index];
+                        if (oldPeer.peer) oldPeer.peer.destroy();
+                    }
+
+                    // Remove old record
+                    peersRef.current = peersRef.current.filter(p => p.peerID !== requesterId);
+
+                    // Create NEW initiator peer
+                    try {
+                        const peer = createPeer(requesterId, socket.id!, stream);
+                        const peerObj: Peer = {
+                            peerID: requesterId,
+                            peer,
+                            stream: null,
+                            connectionState: 'connecting'
+                        };
+                        peersRef.current.push(peerObj);
+                        setPeers([...peersRef.current]);
+                        addLog(`Re-created initiator peer for ${requesterId}`);
+                    } catch (e: any) {
+                        addLog(`Error re-creating peer: ${e.message}`);
                     }
                 });
 
@@ -149,6 +184,7 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
             socket.off('webrtc_ready');
             socket.off('signal');
             socket.off('user_left');
+            socket.off('request_reconnect');
 
             peersRef.current.forEach(p => p.peer.destroy());
             peersRef.current = [];
@@ -164,8 +200,29 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
             config: {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:global.stun.twilio.com:3478' }
-                ]
+                    { urls: 'stun:global.stun.twilio.com:3478' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' },
+                    {
+                        urls: 'turn:openrelay.metered.ca:80',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    }
+                ],
+                iceTransportPolicy: 'all',
+                iceCandidatePoolSize: 10
             }
         });
 
@@ -186,10 +243,49 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
         peer.on('error', (err) => {
             addLog(`Peer error (Init) ${userToSignal}: ${err.message}`);
             updatePeerState(userToSignal, 'failed');
+
+            // Attempt reconnection after a delay
+            setTimeout(() => {
+                if (streamRef.current) {
+                    addLog(`Attempting to reconnect to ${userToSignal}...`);
+                    const newPeer = createPeer(userToSignal, socket?.id || '', streamRef.current);
+                    const peerIndex = peersRef.current.findIndex(p => p.peerID === userToSignal);
+                    if (peerIndex !== -1) {
+                        peersRef.current[peerIndex].peer.destroy();
+                        peersRef.current[peerIndex] = {
+                            peerID: userToSignal,
+                            peer: newPeer,
+                            stream: null,
+                            connectionState: 'connecting'
+                        };
+                        setPeers([...peersRef.current]);
+                    }
+                }
+            }, 3000);
         });
 
         // Add close/disconnect handlers
-        peer.on('close', () => updatePeerState(userToSignal, 'disconnected'));
+        peer.on('close', () => {
+            addLog(`Peer closed (Init): ${userToSignal}`);
+            updatePeerState(userToSignal, 'disconnected');
+        });
+
+        // Monitor ICE connection state
+        // @ts-ignore - _pc is internal SimplePeer property
+        if (peer._pc) {
+            // @ts-ignore
+            peer._pc.oniceconnectionstatechange = () => {
+                // @ts-ignore
+                const state = peer._pc?.iceConnectionState;
+                addLog(`ICE state (Init) ${userToSignal}: ${state}`);
+
+                if (state === 'failed' || state === 'disconnected') {
+                    updatePeerState(userToSignal, 'failed');
+                } else if (state === 'connected' || state === 'completed') {
+                    updatePeerState(userToSignal, 'connected');
+                }
+            };
+        }
 
         return peer;
     }
@@ -202,8 +298,29 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
             config: {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:global.stun.twilio.com:3478' }
-                ]
+                    { urls: 'stun:global.stun.twilio.com:3478' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' },
+                    {
+                        urls: 'turn:openrelay.metered.ca:80',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    }
+                ],
+                iceTransportPolicy: 'all',
+                iceCandidatePoolSize: 10
             }
         });
 
@@ -224,9 +341,38 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
         peer.on('error', (err) => {
             addLog(`Peer error (Recv) ${callerID}: ${err.message}`);
             updatePeerState(callerID, 'failed');
+
+            // Attempt reconnection for receiver peer as well
+            setTimeout(() => {
+                if (streamRef.current) {
+                    addLog(`Attempting to reconnect to ${callerID} (receiver)...`);
+                    // Signal to the other peer to reinitiate
+                    socket?.emit('request_reconnect', { targetId: callerID });
+                }
+            }, 3000);
         });
 
-        peer.on('close', () => updatePeerState(callerID, 'disconnected'));
+        peer.on('close', () => {
+            addLog(`Peer closed (Recv): ${callerID}`);
+            updatePeerState(callerID, 'disconnected');
+        });
+
+        // Monitor ICE connection state
+        // @ts-ignore
+        if (peer._pc) {
+            // @ts-ignore
+            peer._pc.oniceconnectionstatechange = () => {
+                // @ts-ignore
+                const state = peer._pc?.iceConnectionState;
+                addLog(`ICE state (Recv) ${callerID}: ${state}`);
+
+                if (state === 'failed' || state === 'disconnected') {
+                    updatePeerState(callerID, 'failed');
+                } else if (state === 'connected' || state === 'completed') {
+                    updatePeerState(callerID, 'connected');
+                }
+            };
+        }
 
         peer.signal(incomingSignal);
 

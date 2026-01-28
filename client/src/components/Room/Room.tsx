@@ -51,8 +51,31 @@ const Room = () => {
     const [gameSetup, setGameSetup] = useState({ type: 'tictactoe', mode: '2p', p1: '', p2: '' });
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
 
     const [statusDebug, setStatusDebug] = useState('Initializing...');
+
+    // Helper to ensure AudioContext is resumed (for mobile browsers)
+    const ensureAudioContextResumed = async () => {
+        try {
+            if (!audioContextRef.current) {
+                // @ts-ignore - AudioContext is available in browsers
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    audioContextRef.current = new AudioContextClass();
+                    console.log('[Room] AudioContext created');
+                }
+            }
+
+            if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+                console.log('[Room] Resuming suspended AudioContext...');
+                await audioContextRef.current.resume();
+                console.log('[Room] AudioContext resumed successfully');
+            }
+        } catch (e) {
+            console.error('[Room] Failed to initialize/resume AudioContext:', e);
+        }
+    };
 
     useEffect(() => {
         if (!socket) {
@@ -89,6 +112,13 @@ const Room = () => {
                 });
                 setStatusDebug(`Sending join_room for ${roomId}...`);
                 socket.emit('join_room', { username: effectiveUsername, userId: user?.id, roomId });
+
+                // For group rooms (non-DM), initialize AudioContext early
+                if (!isDM) {
+                    ensureAudioContextResumed().then(() => {
+                        console.log('[Room] AudioContext initialized for group room');
+                    });
+                }
             } else {
                 setStatusDebug('No Room ID found!');
             }
@@ -280,7 +310,10 @@ const Room = () => {
         };
     }, [socket, callStatus]);
 
-    const initiateCall = () => {
+    const initiateCall = async () => {
+        // Resume AudioContext on user interaction (critical for mobile)
+        await ensureAudioContextResumed();
+
         if (socket) {
             setCallStatus('calling');
             console.log('[Room] Initiating call with payload:', {
@@ -296,7 +329,10 @@ const Room = () => {
         }
     };
 
-    const acceptCall = () => {
+    const acceptCall = async () => {
+        // Resume AudioContext on user interaction (critical for mobile)
+        await ensureAudioContextResumed();
+
         if (socket) {
             socket.emit('accept_call', { roomId });
             setCallStatus('connected');
@@ -327,7 +363,10 @@ const Room = () => {
         }
     };
 
-    const handleToggleMute = () => {
+    const handleToggleMute = async () => {
+        // Resume AudioContext on user interaction (critical for mobile)
+        await ensureAudioContextResumed();
+
         toggleAudioMute(); // Real mic toggle
         // UI toggle broadcast
         if (socket) {

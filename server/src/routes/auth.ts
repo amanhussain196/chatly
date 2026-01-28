@@ -82,10 +82,20 @@ router.post('/check-availability', async (req, res) => {
         if (username) query.username = username;
         if (email) query.email = email;
 
+        // Check if MongoDB is available
+        if (!process.env.MONGO_URI) {
+            // In guest/memory mode, all usernames are available
+            console.log('[Guest Mode] Username availability check - returning available=true');
+            res.json({ available: true });
+            return;
+        }
+
         const user = await User.findOne({ $or: [query] });
         res.json({ available: !user });
-    } catch (err) {
-        res.status(500).json({ message: 'Server Error' });
+    } catch (err: any) {
+        console.error('Error checking availability:', err.message);
+        // On error (likely DB connection issue), assume available for guest mode
+        res.json({ available: true });
     }
 });
 

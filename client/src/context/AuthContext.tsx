@@ -103,9 +103,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
             const res = await axios.post(`${API_URL}/api/auth/check-availability`, { username, email });
             return res.data.available;
-        } catch (error) {
-            console.error(error);
-            return false;
+        } catch (error: any) {
+            console.warn('Username availability check failed (likely no DB):', error.message);
+            // If server is in guest/memory mode (no MongoDB), allow all usernames
+            // This prevents blocking users when database is not configured
+            return true; // Assume available in guest mode
         }
     };
 

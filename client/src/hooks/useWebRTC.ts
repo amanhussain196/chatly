@@ -47,21 +47,32 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
         const initWebRTC = async () => {
             try {
                 addLog('Requesting user media...');
+
+                // Request audio with mobile-optimized settings
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: false,
                     audio: {
                         echoCancellation: true,
                         noiseSuppression: true,
                         autoGainControl: true,
-                        sampleRate: 48000
+                        sampleRate: 48000,
+                        // Mobile-specific constraints
+                        channelCount: 1, // Mono for better mobile performance
                     }
                 });
+
                 if (isCancelled) {
                     stream.getTracks().forEach(t => t.stop());
                     return;
                 }
 
-                addLog(`Got local stream: ${stream.id}`);
+                // Ensure audio tracks are enabled (critical for mobile)
+                stream.getAudioTracks().forEach(track => {
+                    track.enabled = true;
+                    console.log(`Audio track enabled: ${track.id}, state: ${track.readyState}`);
+                });
+
+                addLog(`Got local stream: ${stream.id} with ${stream.getAudioTracks().length} audio tracks`);
                 streamRef.current = stream;
                 setLocalStream(stream);
 

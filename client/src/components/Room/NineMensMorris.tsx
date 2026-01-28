@@ -29,7 +29,7 @@ interface NineMensMorrisProps {
 }
 
 const NineMensMorris: React.FC<NineMensMorrisProps> = ({ gameState, socket, roomId, currentUserId, isHost }) => {
-    const { board, turn, players, winner, phase, piecesPlaced, piecesOnBoard, selectedPosition, millFormed, lastMoveTime, winReason } = gameState;
+    const { board, turn, players, winner, phase, piecesPlaced, piecesOnBoard, selectedPosition, lastMoveTime, winReason } = gameState;
 
     const isMyTurn = turn === currentUserId;
     const winnerPlayer = players.find(p => p.id === winner);

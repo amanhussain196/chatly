@@ -149,11 +149,17 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
 
                 socket.on('request_reconnect', ({ requesterId }: { requesterId: string }) => {
                     addLog(`Received reconnect request from ${requesterId}`);
-                    const index = peersRef.current.findIndex(p => p.peerID === requesterId);
 
-                    if (index > -1) {
-                        const oldPeer = peersRef.current[index];
-                        if (oldPeer.peer) oldPeer.peer.destroy();
+                    const existingPeer = peersRef.current.find(p => p.peerID === requesterId);
+
+                    // Prevent double-restart: if we are already connecting to them, ignore 
+                    if (existingPeer && existingPeer.connectionState === 'connecting') {
+                        addLog(`Ignored reconnect request from ${requesterId} - already connecting.`);
+                        return;
+                    }
+
+                    if (existingPeer) {
+                        if (existingPeer.peer) existingPeer.peer.destroy();
                     }
 
                     // Remove old record
@@ -270,21 +276,31 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
             // Attempt reconnection after a delay
             setTimeout(() => {
                 if (streamRef.current) {
-                    addLog(`Attempting to reconnect to ${userToSignal}...`);
-                    const newPeer = createPeer(userToSignal, socket?.id || '', streamRef.current);
-                    const peerIndex = peersRef.current.findIndex(p => p.peerID === userToSignal);
-                    if (peerIndex !== -1) {
-                        peersRef.current[peerIndex].peer.destroy();
-                        peersRef.current[peerIndex] = {
-                            peerID: userToSignal,
-                            peer: newPeer,
-                            stream: null,
-                            connectionState: 'connecting',
-                            isInitiator: true
-                        };
-
-                        setPeers([...peersRef.current]);
+                    // Prevent double-reconnection if already connecting (e.g. from request_reconnect)
+                    const currentPeer = peersRef.current.find(p => p.peerID === userToSignal);
+                    if (currentPeer && currentPeer.connectionState === 'connecting') {
+                        addLog(`Reconnection to ${userToSignal} already in progress. Skipping timeout.`);
+                        return;
                     }
+
+                    addLog(`Attempting to reconnect to ${userToSignal}...`);
+
+                    // Clean up old peer if it exists
+                    if (currentPeer) {
+                        currentPeer.peer.destroy();
+                        peersRef.current = peersRef.current.filter(p => p.peerID !== userToSignal);
+                    }
+
+                    const newPeer = createPeer(userToSignal, socket?.id || '', streamRef.current);
+                    const peerObj: Peer = {
+                        peerID: userToSignal,
+                        peer: newPeer,
+                        stream: null,
+                        connectionState: 'connecting',
+                        isInitiator: true
+                    };
+                    peersRef.current.push(peerObj);
+                    setPeers([...peersRef.current]);
                 }
             }, 3000);
         });

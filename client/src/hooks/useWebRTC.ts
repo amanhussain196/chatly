@@ -276,10 +276,15 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
             // Attempt reconnection after a delay
             setTimeout(() => {
                 if (streamRef.current) {
-                    // Prevent double-reconnection if already connecting (e.g. from request_reconnect)
+                    // Check if a REPLACEMENT peer is already connecting (prevent double-connect)
                     const currentPeer = peersRef.current.find(p => p.peerID === userToSignal);
-                    if (currentPeer && currentPeer.connectionState === 'connecting') {
-                        addLog(`Reconnection to ${userToSignal} already in progress. Skipping timeout.`);
+
+                    // distinct check: ensure we don't block ourselves if WE are the one who failed
+                    // SimplePeer instances don't have a unique ID property exposed easily, but object reference works.
+                    // However, we don't have reference to the 'new' peer created by request_reconnect here easily without looking at the array.
+
+                    if (currentPeer && currentPeer.connectionState === 'connecting' && currentPeer.peer !== peer) {
+                        addLog(`Reconnection to ${userToSignal} already in progress by another peer. Skipping.`);
                         return;
                     }
 

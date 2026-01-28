@@ -18,8 +18,21 @@ const FriendsComponent = () => {
 
     const navigate = useNavigate();
     const [view, setView] = useState<'list' | 'add'>('list');
-    const [friends, setFriends] = useState<Friend[]>([]);
-    const [requests, setRequests] = useState<Friend[]>([]);
+
+    // Initialize from cache if available to prevent flickering
+    const [friends, setFriends] = useState<Friend[]>(() => {
+        try {
+            const cached = localStorage.getItem('friends_cache');
+            return cached ? JSON.parse(cached) : [];
+        } catch { return []; }
+    });
+    const [requests, setRequests] = useState<Friend[]>(() => {
+        try {
+            const cached = localStorage.getItem('requests_cache');
+            return cached ? JSON.parse(cached) : [];
+        } catch { return []; }
+    });
+
     const [addUsername, setAddUsername] = useState('');
     const [msg, setMsg] = useState({ text: '', type: '' });
     const [loading, setLoading] = useState(false);
@@ -82,10 +95,19 @@ const FriendsComponent = () => {
     const fetchFriends = async () => {
         try {
             const res = await axios.get(`${API_URL}/api/friends`);
-            setFriends(res.data.friends);
-            setRequests(res.data.requests);
+
+            // Only update if we have valid data
+            if (res.data) {
+                setFriends(res.data.friends || []);
+                setRequests(res.data.requests || []);
+
+                // Cache the results
+                localStorage.setItem('friends_cache', JSON.stringify(res.data.friends || []));
+                localStorage.setItem('requests_cache', JSON.stringify(res.data.requests || []));
+            }
         } catch (err) {
             console.error(err);
+            // On error, we silently keep the cached data instead of wiping it
         }
     };
 

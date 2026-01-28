@@ -7,6 +7,7 @@ interface Peer {
     peer: SimplePeer.Instance;
     stream: MediaStream | null;
     connectionState: 'new' | 'connecting' | 'connected' | 'failed' | 'disconnected';
+    isInitiator: boolean;
 }
 
 export const useWebRTC = (socket: Socket | null, roomId: string, userId: string, enabled: boolean = true) => {
@@ -91,7 +92,8 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
                             peerID: payload.id,
                             peer,
                             stream: null,
-                            connectionState: 'connecting'
+                            connectionState: 'connecting',
+                            isInitiator: true
                         };
                         peersRef.current.push(peerObj);
                         setPeers([...peersRef.current]);
@@ -102,12 +104,31 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
                 });
 
                 socket.on('signal', (payload: { senderId: string, signal: any }) => {
-                    const item = peersRef.current.find(p => p.peerID === payload.senderId);
+                    let item = peersRef.current.find(p => p.peerID === payload.senderId);
+
+                    // COLLISION HANDLING
+                    // If we are trying to initiate (have a peer) AND the incoming signal is an OFFER,
+                    // it means we have a race condition (glare).
+                    if (item && item.isInitiator && payload.signal.type === 'offer') {
+                        addLog(`Collision detected with ${payload.senderId}`);
+                        // Tie-breaker: If my ID is "smaller", I surrender my initiator role.
+                        if (socket.id! < payload.senderId) {
+                            addLog(`I am smaller (${socket.id} < ${payload.senderId}), surrendering initiator role.`);
+                            item.peer.destroy();
+                            peersRef.current = peersRef.current.filter(p => p.peerID !== payload.senderId);
+                            item = undefined; // Treat as if we have no peer, so we accept their offer below
+                        } else {
+                            addLog(`I am larger, ignoring their offer. Waiting for my answer.`);
+                            return; // Ignore this signal. They will surrender.
+                        }
+                    }
+
                     // If peer exists but is failed/destroyed, we might want to replace it
+                    // (Unless we just destroyed it above intentionally)
                     if (item && !item.peer.destroyed) {
                         item.peer.signal(payload.signal);
                     } else {
-                        // If it existed but was destroyed, remove it first (cleanly)
+                        // If it existed but was destroyed (or surrendered), remove it first (cleanly)
                         if (item) {
                             peersRef.current = peersRef.current.filter(p => p.peerID !== payload.senderId);
                         }
@@ -118,7 +139,8 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
                             peerID: payload.senderId,
                             peer,
                             stream: null,
-                            connectionState: 'connecting'
+                            connectionState: 'connecting',
+                            isInitiator: false
                         };
                         peersRef.current.push(peerObj);
                         setPeers([...peersRef.current]);
@@ -144,7 +166,8 @@ export const useWebRTC = (socket: Socket | null, roomId: string, userId: string,
                             peerID: requesterId,
                             peer,
                             stream: null,
-                            connectionState: 'connecting'
+                            connectionState: 'connecting',
+                            isInitiator: true
                         };
                         peersRef.current.push(peerObj);
                         setPeers([...peersRef.current]);

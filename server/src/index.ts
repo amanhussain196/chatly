@@ -64,7 +64,7 @@ interface ChatRoom {
         isPrivate: boolean;
     };
     game?: {
-        type: 'tictactoe' | 'pingpong' | 'stacktower';
+        type: 'tictactoe' | 'pingpong' | 'stacktower' | 'ninemenmorris' | 'connect4';
         state: any;
         timer?: any; // NodeJS.Timeout
     };
@@ -353,6 +353,30 @@ io.on('connection', (socket) => {
             const history = localStore.getHistory(canonicalRoomId);
             socket.emit('message_history', history);
         }
+
+    });
+
+    socket.on('get_room_state', ({ roomId }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        const room = rooms[canonicalRoomId];
+
+        if (room) {
+            // Send user list
+            socket.emit('room_users_update', room.users);
+
+            // Check if current user is implicitly in room
+            const me = room.users.find(u => u.id === socket.id);
+            if (me) {
+                socket.emit('room_joined', { roomId: room.id, user: me });
+            }
+
+            // Sync game state if active
+            if (room.game) {
+                socket.emit('game_started', getSafeGame(room.game));
+                // Also send specific game updates if needed
+                socket.emit('game_update', getSafeGame(room.game));
+            }
+        }
     });
 
     // --- Game Handlers ---
@@ -559,6 +583,44 @@ io.on('connection', (socket) => {
                         winner: null
                     }
                 };
+            } else if (gameType === 'ninemenmorris') {
+                room.game = {
+                    type: 'ninemenmorris',
+                    state: {
+                        board: Array(24).fill(null), // 24 positions
+                        turn: players[0].id,
+                        players: players.map((p: any, idx: number) => ({
+                            ...p,
+                            color: idx === 0 ? 'red' : 'blue'
+                        })),
+                        winner: null,
+                        phase: 'placing', // placing, moving, flying, removing
+                        piecesPlaced: { [players[0].id]: 0, [players[1].id]: 0 },
+                        piecesOnBoard: { [players[0].id]: 0, [players[1].id]: 0 },
+                        selectedPosition: null,
+                        millFormed: false,
+                        lastMoveTime: Date.now()
+                    }
+                };
+                resetGameTimer(room, canonicalRoomId, players[0].id);
+            } else if (gameType === 'connect4') {
+                // Initialize 8 rows x 8 cols board (Requested Update)
+                const board = Array(8).fill(null).map(() => Array(8).fill(null));
+                room.game = {
+                    type: 'connect4',
+                    state: {
+                        board,
+                        turn: players[0].id,
+                        players: players.map((p: any, idx: number) => ({
+                            ...p,
+                            color: idx === 0 ? 'red' : 'blue'
+                        })),
+                        winner: null,
+                        winningCells: [],
+                        lastMoveTime: Date.now()
+                    }
+                };
+                resetGameTimer(room, canonicalRoomId, players[0].id);
             }
 
             io.to(canonicalRoomId).emit('game_started', getSafeGame(room.game));
@@ -627,6 +689,22 @@ io.on('connection', (socket) => {
         const user = users[socket.id];
 
         if (room && room.game && user && user.isHost) {
+            // Re-sync players with current room users to handle reconnections (new Socket IDs)
+            if (room.users.length >= 2) {
+                // Try to match existing game players to current room users by userId
+                const currentUsers = room.users;
+                const gamePlayers = room.game.state.players;
+
+                const updatedPlayers = gamePlayers.map((gp: any) => {
+                    const foundUser = currentUsers.find((u: any) => u.userId === gp.userId);
+                    if (foundUser) {
+                        return { ...gp, id: foundUser.id, username: foundUser.username };
+                    }
+                    return gp;
+                });
+                room.game.state.players = updatedPlayers;
+            }
+
             const players = room.game.state.players;
             if (room.game.timer) {
                 clearTimeout(room.game.timer); // Clear TTT timeout
@@ -657,6 +735,27 @@ io.on('connection', (socket) => {
                     p.status = 'playing';
                     p.history = [];
                 });
+                io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
+            } else if (room.game.type === 'ninemenmorris') {
+                room.game.state.board = Array(24).fill(null);
+                room.game.state.winner = null;
+                room.game.state.winReason = null;
+                room.game.state.phase = 'placing';
+                room.game.state.turn = players[0].id;
+                room.game.state.piecesPlaced = { [players[0].id]: 0, [players[1].id]: 0 };
+                room.game.state.piecesOnBoard = { [players[0].id]: 0, [players[1].id]: 0 };
+                room.game.state.selectedPosition = null;
+                room.game.state.millFormed = false;
+                room.game.state.lastMoveTime = Date.now();
+                resetGameTimer(room, canonicalRoomId, players[0].id);
+                io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
+            } else if (room.game.type === 'connect4') {
+                room.game.state.board = Array(8).fill(null).map(() => Array(8).fill(null));
+                room.game.state.winner = null;
+                room.game.state.winningCells = [];
+                room.game.state.turn = players[0].id;
+                room.game.state.lastMoveTime = Date.now();
+                resetGameTimer(room, canonicalRoomId, players[0].id);
                 io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
             }
         }
@@ -739,6 +838,388 @@ io.on('connection', (socket) => {
                 }
             }, 600);
         }
+    });
+
+    // Nine Men's Morris Move Handler
+    socket.on('morris_move', ({ roomId, position }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        const room = rooms[canonicalRoomId];
+
+        if (!room || !room.game || room.game.type !== 'ninemenmorris') return;
+        if (room.game.state.winner) return;
+
+        const game = room.game.state;
+        if (game.turn !== socket.id) return;
+
+        const player = game.players.find((p: any) => p.id === socket.id);
+        if (!player) return;
+
+        const opponent = game.players.find((p: any) => p.id !== socket.id);
+
+        // Helper: Check if position forms a mill
+        const checkMill = (board: any[], pos: number, playerId: string) => {
+            const mills = [
+                // Outer square
+                [0, 1, 2], [2, 3, 4], [4, 5, 6], [6, 7, 0],
+                // Middle square
+                [8, 9, 10], [10, 11, 12], [12, 13, 14], [14, 15, 8],
+                // Inner square
+                [16, 17, 18], [18, 19, 20], [20, 21, 22], [22, 23, 16],
+                // Cross lines
+                [1, 9, 17], [3, 11, 19], [5, 13, 21], [7, 15, 23]
+            ];
+
+            return mills.some(mill => {
+                return mill.includes(pos) && mill.every(p => board[p] === playerId);
+            });
+        };
+
+        // Helper: Check if piece is part of a mill
+        const isInMill = (board: any[], pos: number) => {
+            const piece = board[pos];
+            if (!piece) return false;
+            return checkMill(board, pos, piece);
+        };
+
+        // Helper: Check if all opponent pieces are in mills
+        const allPiecesInMills = (playerId: string) => {
+            for (let i = 0; i < 24; i++) {
+                if (game.board[i] === playerId) {
+                    if (!isInMill(game.board, i)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        // Helper: Check if player has any valid moves
+        const hasValidMoves = (playerId: string) => {
+            const adjacency: number[][] = [
+                // Outer square: 0-7
+                [1, 7],        // 0: top-left
+                [0, 2, 9],     // 1: top-center
+                [1, 3],        // 2: top-right
+                [2, 4, 11],    // 3: right-top
+                [3, 5],        // 4: right-bottom
+                [4, 6, 13],    // 5: bottom-center
+                [5, 7],        // 6: bottom-left
+                [0, 6, 15],    // 7: left-center
+                // Middle square: 8-15
+                [9, 15],       // 8: top-left
+                [1, 8, 10, 17], // 9: top-center (connects to outer 1 and inner 17)
+                [9, 11],       // 10: top-right
+                [3, 10, 12, 19], // 11: right-center (connects to outer 3 and inner 19)
+                [11, 13],      // 12: bottom-right
+                [5, 12, 14, 21], // 13: bottom-center (connects to outer 5 and inner 21)
+                [13, 15],      // 14: bottom-left
+                [7, 8, 14, 23], // 15: left-center (connects to outer 7 and inner 23)
+                // Inner square: 16-23
+                [17, 23],      // 16: top-left
+                [9, 16, 18],   // 17: top-center (connects to middle 9)
+                [17, 19],      // 18: top-right
+                [11, 18, 20],  // 19: right-center (connects to middle 11)
+                [19, 21],      // 20: bottom-right
+                [13, 20, 22],  // 21: bottom-center (connects to middle 13)
+                [21, 23],      // 22: bottom-left
+                [15, 16, 22]   // 23: left-center (connects to middle 15)
+            ];
+
+            if (game.piecesOnBoard[playerId] === 3) {
+                return game.board.includes(null);
+            }
+
+            for (let i = 0; i < 24; i++) {
+                if (game.board[i] === playerId) {
+                    for (const adj of adjacency[i]) {
+                        if (game.board[adj] === null) return true;
+                    }
+                }
+            }
+            return false;
+        };
+
+        // Helper: Check if there are any removable pieces
+        const hasRemovablePieces = (opponentId: string) => {
+            const allInMills = allPiecesInMills(opponentId);
+            for (let i = 0; i < 24; i++) {
+                if (game.board[i] === opponentId) {
+                    if (!isInMill(game.board, i) || allInMills) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+
+        // PHASE: REMOVING (after mill formed)
+        if (game.phase === 'removing') {
+            if (game.board[position] === opponent.id) {
+                const pieceInMill = isInMill(game.board, position);
+                const allOpponentInMills = allPiecesInMills(opponent.id);
+
+                if (!pieceInMill || allOpponentInMills) {
+                    game.board[position] = null;
+                    game.piecesOnBoard[opponent.id]--;
+                    game.millFormed = false;
+
+                    if (game.piecesPlaced[player.id] < 9 || game.piecesPlaced[opponent.id] < 9) {
+                        game.phase = 'placing';
+                    } else if (game.piecesOnBoard[socket.id] === 3 || game.piecesOnBoard[opponent.id] === 3) {
+                        game.phase = 'flying';
+                    } else {
+                        game.phase = 'moving';
+                    }
+
+                    game.turn = opponent.id;
+                    game.lastMoveTime = Date.now();
+                    resetGameTimer(room, canonicalRoomId, opponent.id);
+                }
+            }
+
+            // PHASE 1: PLACING
+        } else if (game.phase === 'placing') {
+            if (game.board[position] !== null) return; // Position occupied
+
+            // Place piece
+            game.board[position] = socket.id;
+            game.piecesPlaced[socket.id]++;
+            game.piecesOnBoard[socket.id]++;
+
+            // Check if mill formed
+            if (checkMill(game.board, position, socket.id)) {
+                if (hasRemovablePieces(opponent.id)) {
+                    game.phase = 'removing';
+                    game.millFormed = true;
+                } else {
+                    if (game.piecesPlaced[player.id] >= 9 && game.piecesPlaced[opponent.id] >= 9) {
+                        game.phase = 'moving';
+                    }
+                    game.turn = opponent.id;
+                    game.lastMoveTime = Date.now();
+                    resetGameTimer(room, canonicalRoomId, opponent.id);
+                }
+            } else {
+                if (game.piecesPlaced[player.id] >= 9 && game.piecesPlaced[opponent.id] >= 9) {
+                    game.phase = 'moving';
+                }
+                game.turn = opponent.id;
+                game.lastMoveTime = Date.now();
+                resetGameTimer(room, canonicalRoomId, opponent.id);
+            }
+
+            // PHASE 2: MOVING
+        } else if (game.phase === 'moving') {
+            const adjacency: number[][] = [
+                // Outer square: 0-7
+                [1, 7],        // 0: top-left
+                [0, 2, 9],     // 1: top-center
+                [1, 3],        // 2: top-right
+                [2, 4, 11],    // 3: right-top
+                [3, 5],        // 4: right-bottom
+                [4, 6, 13],    // 5: bottom-center
+                [5, 7],        // 6: bottom-left
+                [0, 6, 15],    // 7: left-center
+                // Middle square: 8-15
+                [9, 15],       // 8: top-left
+                [1, 8, 10, 17], // 9: top-center
+                [9, 11],       // 10: top-right
+                [3, 10, 12, 19], // 11: right-center
+                [11, 13],      // 12: bottom-right
+                [5, 12, 14, 21], // 13: bottom-center
+                [13, 15],      // 14: bottom-left
+                [7, 8, 14, 23], // 15: left-center
+                // Inner square: 16-23
+                [17, 23],      // 16: top-left
+                [9, 16, 18],   // 17: top-center
+                [17, 19],      // 18: top-right
+                [11, 18, 20],  // 19: right-center
+                [19, 21],      // 20: bottom-right
+                [13, 20, 22],  // 21: bottom-center
+                [21, 23],      // 22: bottom-left
+                [15, 16, 22]   // 23: left-center
+            ];
+
+            if (game.selectedPosition === null) {
+                // Select a piece to move
+                if (game.board[position] === socket.id) {
+                    game.selectedPosition = position;
+                }
+            } else {
+                // Move selected piece
+                if (game.board[position] === null) {
+                    const isAdjacent = adjacency[game.selectedPosition].includes(position);
+
+                    if (isAdjacent) {
+                        // Move piece
+                        game.board[position] = socket.id;
+                        game.board[game.selectedPosition] = null;
+                        game.selectedPosition = null;
+
+                        // Check if mill formed
+                        if (checkMill(game.board, position, socket.id)) {
+                            if (hasRemovablePieces(opponent.id)) {
+                                game.phase = 'removing';
+                                game.millFormed = true;
+                            } else {
+                                if (game.piecesOnBoard[socket.id] === 3) {
+                                    game.phase = 'flying';
+                                }
+                                game.turn = opponent.id;
+                                game.lastMoveTime = Date.now();
+                                resetGameTimer(room, canonicalRoomId, opponent.id);
+                            }
+                        } else {
+                            if (game.piecesOnBoard[socket.id] === 3) {
+                                game.phase = 'flying';
+                            }
+                            game.turn = opponent.id;
+                            game.lastMoveTime = Date.now();
+                            resetGameTimer(room, canonicalRoomId, opponent.id);
+                        }
+                    }
+                } else if (game.board[position] === socket.id) {
+                    // Reselect different piece
+                    game.selectedPosition = position;
+                }
+            }
+
+            // PHASE 3: FLYING (when player has only 3 pieces)
+        } else if (game.phase === 'flying') {
+            if (game.selectedPosition === null) {
+                // Select a piece
+                if (game.board[position] === socket.id) {
+                    game.selectedPosition = position;
+                }
+            } else {
+                // Fly to any empty position
+                if (game.board[position] === null) {
+                    game.board[position] = socket.id;
+                    game.board[game.selectedPosition] = null;
+                    game.selectedPosition = null;
+
+                    // Check if mill formed
+                    if (checkMill(game.board, position, socket.id)) {
+                        if (hasRemovablePieces(opponent.id)) {
+                            game.phase = 'removing';
+                            game.millFormed = true;
+                        } else {
+                            game.turn = opponent.id;
+                            game.lastMoveTime = Date.now();
+                            resetGameTimer(room, canonicalRoomId, opponent.id);
+                        }
+                    } else {
+                        game.turn = opponent.id;
+                        game.lastMoveTime = Date.now();
+                        resetGameTimer(room, canonicalRoomId, opponent.id);
+                    }
+                } else if (game.board[position] === socket.id) {
+                    // Reselect
+                    game.selectedPosition = position;
+                }
+            }
+        }
+
+        // Check win/draw conditions
+        if (game.phase !== 'placing' && game.phase !== 'removing') {
+            if (game.piecesOnBoard[opponent.id] < 3) {
+                game.winner = socket.id;
+                if (room.game && room.game.timer) clearTimeout(room.game.timer);
+            } else if (!hasValidMoves(opponent.id)) {
+                game.winner = 'draw';
+                game.winReason = 'stalemate';
+                if (room.game && room.game.timer) clearTimeout(room.game.timer);
+            }
+        }
+
+        io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
+    });
+
+    // Connect 4 Move Handler
+    socket.on('connect4_move', ({ roomId, column }) => {
+        const canonicalRoomId = roomId.toUpperCase();
+        const room = rooms[canonicalRoomId];
+
+        if (!room || !room.game || room.game.type !== 'connect4') return;
+        if (room.game.state.winner) return;
+
+        const game = room.game.state;
+        if (game.turn !== socket.id) return;
+
+        // Check valid column (8 cols)
+        if (column < 0 || column >= 8) return;
+
+        // Find lowest empty row in column (8 rows)
+        let rowToPlace = -1;
+        for (let r = 7; r >= 0; r--) {
+            if (game.board[r][column] === null) {
+                rowToPlace = r;
+                break;
+            }
+        }
+
+        if (rowToPlace === -1) return; // Column full
+
+        // Place piece
+        game.board[rowToPlace][column] = socket.id;
+
+        // Check Win
+        const checkWin = (row: number, col: number, player: string) => {
+            // Directions: [dr, dc]
+            const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]]; // Horiz, Vert, Diag, Anti-Diag
+
+            for (const [dr, dc] of dirs) {
+                let count = 1;
+                const winningCells = [{ r: row, c: col }];
+
+                // Check forward
+                for (let i = 1; i < 4; i++) {
+                    const r = row + (dr * i);
+                    const c = col + (dc * i);
+                    if (r >= 0 && r < 8 && c >= 0 && c < 8 && game.board[r][c] === player) {
+                        count++;
+                        winningCells.push({ r, c });
+                    } else break;
+                }
+
+                // Check backward
+                for (let i = 1; i < 4; i++) {
+                    const r = row - (dr * i);
+                    const c = col - (dc * i);
+                    if (r >= 0 && r < 8 && c >= 0 && c < 8 && game.board[r][c] === player) {
+                        count++;
+                        winningCells.push({ r, c });
+                    } else break;
+                }
+
+                if (count >= 4) {
+                    return winningCells;
+                }
+            }
+            return null;
+        };
+
+        const winningCells = checkWin(rowToPlace, column, socket.id);
+        if (winningCells) {
+            game.winner = socket.id;
+            game.winningCells = winningCells;
+            if (room.game.timer) clearTimeout(room.game.timer);
+        } else {
+            // Check Draw (Full Board)
+            const isFull = game.board.every((row: any[]) => row.every((cell: any) => cell !== null));
+            if (isFull) {
+                game.winner = 'draw';
+                if (room.game.timer) clearTimeout(room.game.timer);
+            } else {
+                // Switch Turn
+                const opponent = game.players.find((p: any) => p.id !== socket.id);
+                game.turn = opponent.id;
+                game.lastMoveTime = Date.now();
+                resetGameTimer(room, canonicalRoomId, opponent.id);
+            }
+        }
+
+        io.to(canonicalRoomId).emit('game_update', getSafeGame(room.game));
     });
 
 

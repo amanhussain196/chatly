@@ -10,6 +10,8 @@ import { Mic, MicOff, Send, PhoneOff, Copy, User as UserIcon, Phone, PhoneIncomi
 import TicTacToe from './TicTacToe';
 import PingPong from './PingPong';
 import StackTower from './StackTower';
+import NineMensMorris from './NineMensMorris';
+import Connect4 from './Connect4';
 
 
 interface User {
@@ -767,6 +769,32 @@ const Room = () => {
                     </div>
                 )}
 
+                {/* Nine Men's Morris Overlay */}
+                {roomGame && roomGame.type === 'ninemenmorris' && currentUser && (
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 50 }}>
+                        <NineMensMorris
+                            gameState={roomGame.state}
+                            socket={socket}
+                            roomId={roomId || ''}
+                            currentUserId={currentUser.id}
+                            isHost={currentUser.isHost}
+                        />
+                    </div>
+                )}
+
+                {/* Connect 4 Overlay */}
+                {roomGame && roomGame.type === 'connect4' && currentUser && (
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 50 }}>
+                        <Connect4
+                            gameState={roomGame.state}
+                            socket={socket}
+                            roomId={roomId || ''}
+                            currentUserId={currentUser.id}
+                            isHost={currentUser.isHost}
+                        />
+                    </div>
+                )}
+
                 {/* Debug Logs */}
                 {showLogs && (
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, overflowY: 'auto', padding: 16, fontSize: '0.8rem', fontFamily: 'monospace' }}>
@@ -866,6 +894,20 @@ const Room = () => {
                             >
                                 <Gamepad2 size={24} />
                                 Stack Tower (New)
+                            </button>
+                            <button
+                                onClick={() => handleGameSelect('ninemenmorris')}
+                                style={{ width: '100%', padding: '16px', background: '#10b981', border: 'none', borderRadius: '8px', color: 'white', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.1rem', marginTop: '10px' }}
+                            >
+                                <Gamepad2 size={24} />
+                                Nine Men's Morris (New)
+                            </button>
+                            <button
+                                onClick={() => handleGameSelect('connect4')}
+                                style={{ width: '100%', padding: '16px', background: '#eab308', border: 'none', borderRadius: '8px', color: 'white', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.1rem', marginTop: '10px' }}
+                            >
+                                <Gamepad2 size={24} />
+                                Connect 4 (New)
                             </button>
                         </div>
                     </div>

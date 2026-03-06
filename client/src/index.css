@@ -9,11 +9,17 @@
 
   --bg-light: #f1f5f9;
   /* Slate-100 */
-  --bg-card: rgba(255, 255, 255, 0.15);
+  --bg-card: rgba(255, 255, 255, 0.85);
   --text-main: #0f172a;
   /* Slate-900 */
   --text-muted: #475569;
   /* Slate-600 */
+
+  /* Semantic Colors used implicitly in JSX */
+  --primary: var(--primary-blue);
+  --danger: var(--primary-red);
+  --success: #10b981;
+  --accent: #8b5cf6;
 
   --radius-xl: 28px;
   --radius-lg: 18px;
@@ -51,7 +57,14 @@ body {
 }
 
 /* Base App Elements */
-button,
+button {
+  font-family: 'Inter', sans-serif;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  background: transparent;
+}
+
 input {
   font-family: 'Inter', sans-serif;
 }

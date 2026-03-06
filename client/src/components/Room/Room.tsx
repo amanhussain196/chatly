@@ -587,7 +587,7 @@ const Room = () => {
             )}
 
             {/* Header */}
-            <div style={{ padding: '16px', background: 'var(--bg-card)', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '16px', background: 'var(--bg-card)', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, background: socket?.connected ? 'green' : 'red', fontSize: '10px', padding: '2px', width: '100%', textAlign: 'center', zIndex: 9999 }}>
                     Socket: {socket?.id} | {socket?.connected ? 'CONNECTED' : 'DISCONNECTED'} | PID: {socket?.io?.engine?.transport?.name}
                 </div>
@@ -622,7 +622,7 @@ const Room = () => {
 
             {/* Tabs (Hidden for DM) */}
             {!isDM && (
-                <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
                     <button
                         style={{ flex: 1, padding: '12px', background: 'transparent', color: activeTab === 'chat' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'chat' ? '2px solid var(--primary)' : 'none' }}
                         onClick={() => setActiveTab('chat')}
@@ -664,12 +664,13 @@ const Room = () => {
                                             {msg.sender !== currentUser.username && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', paddingLeft: '8px' }}>{msg.sender}</span>}
                                             <div style={{
                                                 background: msg.sender === currentUser.username ? 'var(--primary)' : 'var(--bg-card)',
-                                                color: 'white',
+                                                color: msg.sender === currentUser.username ? 'white' : 'var(--text-main)',
                                                 padding: '10px 14px',
                                                 borderRadius: '18px',
                                                 borderTopRightRadius: msg.sender === currentUser.username ? '4px' : '18px',
                                                 borderTopLeftRadius: msg.sender !== currentUser.username ? '4px' : '18px',
                                                 position: 'relative',
+                                                boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
                                                 paddingBottom: '20px' // Make room for tick
                                             }}>
                                                 {msg.text}
@@ -698,7 +699,7 @@ const Room = () => {
                                 value={newMessage}
                                 onChange={(e) => setNewMessage(e.target.value)}
                                 placeholder="Type a message..."
-                                style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: 'none', padding: '12px', borderRadius: '24px', color: 'white' }}
+                                style={{ flex: 1, background: 'rgba(0,0,0,0.05)', border: 'none', padding: '12px 16px', outline: 'none', borderRadius: '24px', color: 'var(--text-main)' }}
                             />
                             <button type="submit" disabled={!newMessage.trim()} style={{ background: 'var(--primary)', color: 'white', padding: '10px', borderRadius: '50%', opacity: newMessage.trim() ? 1 : 0.5 }}>
                                 <Send size={20} />
@@ -847,12 +848,12 @@ const Room = () => {
             </div>
 
             {/* Footer Controls */}
-            <div style={{ padding: '16px', background: 'var(--bg-card)', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+            <div style={{ padding: '16px', background: 'var(--bg-card)', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
 
                 {/* Microphone - Show in Group Rooms OR if Call is Connected in DM */}
                 {(!isDM || callStatus === 'connected') && (
-                    <button onClick={handleToggleMute} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'transparent', color: currentUser.isMuted ? 'var(--danger)' : 'white' }}>
-                        <div style={{ position: 'relative', padding: '12px', background: currentUser.isMuted ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255,255,255,0.1)', borderRadius: '50%' }}>
+                    <button onClick={handleToggleMute} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'transparent', color: currentUser.isMuted ? 'var(--danger)' : 'var(--text-main)' }}>
+                        <div style={{ position: 'relative', padding: '12px', background: currentUser.isMuted ? 'rgba(239, 68, 68, 0.1)' : 'rgba(0,0,0,0.05)', borderRadius: '50%' }}>
                             {currentUser.isMuted ? <MicOff size={24} /> : <Mic size={24} />}
                             {/* Local Visualizer Overlay */}
                             {!currentUser.isMuted && stream && (
@@ -888,7 +889,7 @@ const Room = () => {
                 {/* Start Game - Show ONLY in Group Rooms */}
                 {!isDM && (
                     <button onClick={handleStartGameClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'transparent', color: currentUser.isHost ? 'var(--primary)' : 'var(--text-muted)', opacity: currentUser.isHost ? 1 : 0.5, cursor: currentUser.isHost ? 'pointer' : 'not-allowed' }}>
-                        <div style={{ padding: '12px', background: currentUser.isHost ? 'rgba(79, 70, 229, 0.1)' : 'rgba(255,255,255,0.05)', borderRadius: '50%' }}>
+                        <div style={{ padding: '12px', background: currentUser.isHost ? 'rgba(79, 70, 229, 0.1)' : 'rgba(0,0,0,0.05)', borderRadius: '50%' }}>
                             <Gamepad2 size={24} />
                         </div>
                         <span style={{ fontSize: '0.75rem' }}>Start Game</span>

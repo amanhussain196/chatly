@@ -587,10 +587,37 @@ const Room = () => {
             )}
 
             {/* Header */}
-            <div style={{ padding: '16px', background: 'var(--bg-card)', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, background: socket?.connected ? 'green' : 'red', fontSize: '10px', padding: '2px', width: '100%', textAlign: 'center', zIndex: 9999 }}>
-                    Socket: {socket?.id} | {socket?.connected ? 'CONNECTED' : 'DISCONNECTED'} | PID: {socket?.io?.engine?.transport?.name}
+            <div style={{ padding: '16px', background: 'var(--bg-card)', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
+
+                {/* Modern Connection Status Bar */}
+                <div style={{
+                    position: 'absolute', top: 0, left: 0, width: '100%', height: '3px',
+                    background: socket?.connected ? 'transparent' : 'rgba(99, 102, 241, 0.2)',
+                    zIndex: 9999, overflow: 'hidden',
+                    transition: 'background 0.3s ease'
+                }}>
+                    {!socket?.connected && (
+                        <div style={{
+                            height: '100%', width: '30%', background: 'var(--primary)',
+                            animation: 'loadingBar 1s infinite ease-in-out'
+                        }} />
+                    )}
                 </div>
+
+                {/* Modern Connectivity Badge (Connecting...) */}
+                {!socket?.connected && (
+                    <div style={{
+                        position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+                        background: 'rgba(0,0,0,0.8)', color: 'white', padding: '4px 12px',
+                        borderRadius: '12px', fontSize: '0.75rem', zIndex: 9999,
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                    }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)', animation: 'pulse 1.5s infinite' }} />
+                        Connecting...
+                    </div>
+                )}
+
                 <div style={{ marginTop: '15px' }}>
                     {isDM ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

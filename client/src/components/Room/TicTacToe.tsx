@@ -94,7 +94,8 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ gameState, socket, roomId, curren
             position: 'absolute',
             top: 0,
             left: 0,
-            zIndex: 10
+            zIndex: 10,
+            backgroundImage: 'var(--primary-gradient)'
         }}>
             {/* Header */}
             <div style={{ marginBottom: '20px', textAlign: 'center' }}>
@@ -104,11 +105,11 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ gameState, socket, roomId, curren
                 </div>
                 {/* Visual Timer Bar */}
                 {(!winner && !draw) && (
-                    <div style={{ width: '200px', height: '4px', background: '#334155', margin: '10px auto', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ width: '200px', height: '6px', background: 'rgba(255,255,255,0.2)', margin: '15px auto', borderRadius: '4px', overflow: 'hidden' }}>
                         <div style={{
                             height: '100%',
                             width: `${(timeLeft / 15) * 100}%`,
-                            background: timeLeft < 5 ? 'var(--danger)' : 'var(--primary)',
+                            background: timeLeft < 5 ? '#fca5a5' : '#ffffff',
                             transition: 'width 0.5s linear'
                         }} />
                     </div>
@@ -149,10 +150,11 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ gameState, socket, roomId, curren
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, 1fr)',
                 gap: '8px',
-                background: '#334155',
-                padding: '8px',
-                borderRadius: '12px',
-                pointerEvents: (isMyTurn && !winner && !draw) ? 'auto' : 'none'
+                background: 'rgba(255, 255, 255, 0.1)',
+                padding: '12px',
+                borderRadius: '16px',
+                pointerEvents: (isMyTurn && !winner && !draw) ? 'auto' : 'none',
+                boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.1)'
             }}>
                 {board.map((cell, index) => (
                     <div
@@ -161,7 +163,7 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ gameState, socket, roomId, curren
                         style={{
                             width: '80px',
                             height: '80px',
-                            background: 'var(--bg-card)',
+                            background: 'rgba(255, 255, 255, 0.95)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -169,7 +171,10 @@ const TicTacToe: React.FC<TicTacToeProps> = ({ gameState, socket, roomId, curren
                             fontWeight: 'bold',
                             cursor: (isMyTurn && !cell) ? 'pointer' : 'default',
                             color: cell === 'X' ? '#3b82f6' : '#ec4899',
-                            borderRadius: '4px'
+                            borderRadius: '12px',
+                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                            transition: 'transform 0.1s ease',
+                            transform: (isMyTurn && !cell) ? 'scale(1)' : 'scale(0.98)'
                         }}
                     >
                         {cell}

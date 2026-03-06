@@ -48,7 +48,7 @@ const AuthPage = () => {
         try {
             const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
             const payload = authMode === 'login'
-                ? { identifier: formData.username, password: formData.password } // Allow login with email too if user types it
+                ? { identifier: formData.username, password: formData.password }
                 : formData;
 
             const res = await axios.post(`${API_URL}${endpoint}`, payload);
@@ -63,57 +63,80 @@ const AuthPage = () => {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', padding: 20 }}>
-            <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: 20, background: 'linear-gradient(to right, #a78bfa, #f472b6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                Chatly
-            </h1>
+        <div className="app-container">
+            <div className="glass-card animate-fade-in" style={{ padding: '40px 24px' }}>
 
-            <div className="card" style={{ width: '100%', maxWidth: 400, padding: 24 }}>
-                <h2 style={{ fontSize: '1.5rem', marginBottom: 20, textAlign: 'center' }}>
+                {/* Header Section */}
+                <div className="mb-4 animate-float" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <img src="/chatly_logo.png" alt="Chatly" style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
+                    <h1 className="text-gradient" style={{ fontSize: '3rem', fontWeight: 800, margin: 0 }}>
+                        Chatly
+                    </h1>
+                </div>
+
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '24px', color: 'var(--text-main)' }}>
                     {authMode === 'login' ? 'Welcome Back' : authMode === 'signup' ? 'Create Account' : 'Guest Access'}
                 </h2>
 
-                {error && <div style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', padding: 10, borderRadius: 8, marginBottom: 16 }}>{error}</div>}
+                {error && (
+                    <div style={{ background: '#fef2f2', color: '#ef4444', padding: '12px', borderRadius: '12px', marginBottom: '16px', fontSize: '0.9rem' }}>
+                        {error}
+                    </div>
+                )}
 
-                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Form Section */}
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+
                     {authMode === 'signup' && (
-                        <div>
-                            <label style={{ display: 'block', marginBottom: 8 }}>Email</label>
+                        <div style={{ textAlign: 'left' }}>
+                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-muted)' }}>Email</label>
                             <input
+                                className="input-pill"
                                 type="email"
                                 required
-                                style={{ width: '100%', padding: 12, borderRadius: 8, border: '1px solid #333', background: '#1e293b', color: 'white' }}
+                                placeholder="name@example.com"
+                                style={{ textAlign: 'left', paddingLeft: '20px' }}
                                 value={formData.email}
                                 onChange={e => setFormData({ ...formData, email: e.target.value })}
                             />
                         </div>
                     )}
 
-                    <div>
-                        <label style={{ display: 'block', marginBottom: 8 }}>{authMode === 'login' ? 'Username or Email' : 'Username'}</label>
+                    <div style={{ textAlign: 'left' }}>
+                        <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                            {authMode === 'login' ? 'Username or Email' : 'Username'}
+                        </label>
                         <div style={{ position: 'relative' }}>
                             <input
+                                className="input-pill"
                                 type="text"
                                 required
-                                style={{ width: '100%', padding: 12, borderRadius: 8, border: `1px solid ${(authMode !== 'login' && usernameAvailable === false) ? 'red' : '#333'}`, background: '#1e293b', color: 'white' }}
+                                placeholder={authMode === 'login' ? "Enter your username" : "Choose a unique username"}
+                                style={{
+                                    textAlign: 'left',
+                                    paddingLeft: '20px',
+                                    borderColor: (authMode !== 'login' && usernameAvailable === false) ? '#ef4444' : undefined
+                                }}
                                 value={formData.username}
                                 onChange={e => setFormData({ ...formData, username: e.target.value })}
                             />
                             {authMode !== 'login' && usernameAvailable !== null && (
-                                <span style={{ position: 'absolute', right: 10, top: 12, fontSize: 12, color: usernameAvailable ? 'green' : 'red' }}>
-                                    {usernameAvailable ? 'Available' : 'Taken'}
+                                <span style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontSize: '0.8rem', fontWeight: 700, color: usernameAvailable ? '#22c55e' : '#ef4444' }}>
+                                    {usernameAvailable ? '✓ Available' : '✕ Taken'}
                                 </span>
                             )}
                         </div>
                     </div>
 
                     {authMode !== 'guest' && (
-                        <div>
-                            <label style={{ display: 'block', marginBottom: 8 }}>Password</label>
+                        <div style={{ textAlign: 'left' }}>
+                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-muted)' }}>Password</label>
                             <input
+                                className="input-pill"
                                 type="password"
                                 required
-                                style={{ width: '100%', padding: 12, borderRadius: 8, border: '1px solid #333', background: '#1e293b', color: 'white' }}
+                                placeholder="••••••••"
+                                style={{ textAlign: 'left', paddingLeft: '20px' }}
                                 value={formData.password}
                                 onChange={e => setFormData({ ...formData, password: e.target.value })}
                             />
@@ -122,32 +145,34 @@ const AuthPage = () => {
 
                     <button
                         type="submit"
+                        className="btn-primary"
                         disabled={loading || (authMode !== 'login' && usernameAvailable === false)}
-                        style={{ padding: 12, background: 'var(--primary)', color: 'white', borderRadius: 8, border: 'none', cursor: 'pointer', marginTop: 8, opacity: loading ? 0.7 : 1 }}
+                        style={{ marginTop: '16px' }}
                     >
                         {loading ? 'Processing...' : (authMode === 'login' ? 'Login' : authMode === 'signup' ? 'Sign Up' : 'Start as Guest')}
                     </button>
                 </form>
 
-                <div style={{ marginTop: 20, textAlign: 'center', fontSize: '0.9rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {/* Footer / Toggle Section */}
+                <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
                     {authMode === 'login' ? (
                         <>
                             <span>
-                                Don't have an account?{' '}
+                                New here?{' '}
                                 <button
                                     onClick={() => setAuthMode('signup')}
-                                    style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline' }}
+                                    style={{ background: 'transparent', border: 'none', color: '#3b82f6', fontWeight: 700, cursor: 'pointer' }}
                                 >
                                     Sign Up
                                 </button>
                             </span>
                             <span>
-                                Or{' '}
+                                Just want to play?{' '}
                                 <button
                                     onClick={() => setAuthMode('guest')}
-                                    style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline' }}
+                                    style={{ background: 'transparent', border: 'none', color: '#3b82f6', fontWeight: 700, cursor: 'pointer' }}
                                 >
-                                    Continue as Guest
+                                    Guest Mode
                                 </button>
                             </span>
                         </>
@@ -156,13 +181,17 @@ const AuthPage = () => {
                             Already have an account?{' '}
                             <button
                                 onClick={() => setAuthMode('login')}
-                                style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline' }}
+                                style={{ background: 'transparent', border: 'none', color: '#3b82f6', fontWeight: 700, cursor: 'pointer' }}
                             >
                                 Login
                             </button>
                         </span>
                     )}
                 </div>
+            </div>
+
+            <div style={{ textAlign: 'center', marginTop: '24px', opacity: 0.5, fontSize: '0.8rem' }}>
+                © 2026 Chatly • Secure & Fun
             </div>
         </div>
     );

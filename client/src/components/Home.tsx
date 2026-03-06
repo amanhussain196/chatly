@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, PhoneIncoming, X, Check } from 'lucide-react';
+import { Plus, Users, PhoneIncoming, X, Check, LogOut, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import FriendsComponent from './FriendsComponent';
 
@@ -24,20 +24,13 @@ const Home = () => {
         if (!socket) return;
 
         socket.on('incoming_call', (data) => {
-            console.log("Incoming call received in Home:", data);
             setIncomingCall(data);
-
-            // Play ringtone
             if (!ringtoneRef.current) {
                 ringtoneRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE');
                 ringtoneRef.current.loop = true;
             }
             ringtoneRef.current.play().catch((e: unknown) => console.log('Ringtone play failed:', e));
-
-            // Vibrate if supported
-            if ('vibrate' in navigator) {
-                navigator.vibrate([200, 100, 200, 100, 200]);
-            }
+            if ('vibrate' in navigator) navigator.vibrate([200, 100, 200, 100, 200]);
         });
 
         socket.on('call_ended', () => {
@@ -56,10 +49,8 @@ const Home = () => {
     const acceptCall = () => {
         if (incomingCall && socket) {
             socket.emit('accept_call', { roomId: incomingCall.roomId });
-            // Stop ringtone
             ringtoneRef.current?.pause();
             if (ringtoneRef.current) ringtoneRef.current.currentTime = 0;
-            // Navigate to room with 'connected' state so Room.tsx knows to start WebRTC
             navigate(`/room/${incomingCall.roomId}`, {
                 state: {
                     username: user?.username,
@@ -74,7 +65,6 @@ const Home = () => {
     const declineCall = () => {
         if (incomingCall && socket) {
             socket.emit('decline_call', { roomId: incomingCall.roomId });
-            // Stop ringtone
             ringtoneRef.current?.pause();
             if (ringtoneRef.current) ringtoneRef.current.currentTime = 0;
             setIncomingCall(null);
@@ -89,14 +79,14 @@ const Home = () => {
 
     const handleCreateRoom = () => {
         if (socket) {
-            // Use authenticated username if available, else local state (though we guard access now)
             const nameToUse = user ? user.username : username;
             const idToUse = user ? user.id : undefined;
-
             socket.emit('create_room', { username: nameToUse, userId: idToUse, isPrivate: true });
-            socket.once('room_created', ({ roomId }) => {
+            const onCreated = ({ roomId }: { roomId: string }) => {
                 navigate(`/room/${roomId}`, { state: { username: nameToUse } });
-            });
+                socket.off('room_created', onCreated);
+            };
+            socket.once('room_created', onCreated);
         }
     };
 
@@ -105,132 +95,153 @@ const Home = () => {
         const idToUse = user ? user.id : undefined;
 
         if (roomCode.length < 6) {
-            setError('Invalid Room Code');
+            setError('Code must be 6 characters');
             return;
         }
         if (socket) {
             socket.emit('join_room', { username: nameToUse, userId: idToUse, roomId: roomCode });
-            socket.once('room_joined', ({ roomId }) => {
+            const onJoined = ({ roomId }: { roomId: string }) => {
                 navigate(`/room/${roomId}`, { state: { username: nameToUse } });
-            });
-            socket.once('error', (msg: string) => {
-                setError(msg);
-            });
+                socket.off('room_joined', onJoined);
+            };
+            socket.once('room_joined', onJoined);
+            socket.once('error', (msg: string) => setError(msg));
         }
     };
 
     return (
-        <div className="container" style={{ justifyContent: 'center', padding: '20px', position: 'relative' }}>
+        <div className="app-container">
             {/* Incoming Call Overlay */}
             {incomingCall && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.9)', zIndex: 9999,
+                    background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', zIndex: 9999,
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '32px'
                 }}>
-                    <div className="animate-bounce" style={{ width: 100, height: 100, borderRadius: '50%', background: 'rgba(34, 197, 94, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <PhoneIncoming size={48} color="var(--success)" />
+                    <div className="animate-float" style={{
+                        width: 120, height: 120, borderRadius: '50%',
+                        background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 0 40px rgba(59, 130, 246, 0.4)' // Blue glow
+                    }}>
+                        <PhoneIncoming size={56} color="#3b82f6" />
                     </div>
-                    <div style={{ textAlign: 'center' }}>
-                        <h3 style={{ fontSize: '1.8rem' }}>{incomingCall.callerName}</h3>
-                        <p style={{ color: 'var(--text-muted)' }}>Incoming Call...</p>
+                    <div style={{ textAlign: 'center', color: 'white' }}>
+                        <h2 style={{ fontSize: '2rem', fontWeight: 700 }}>{incomingCall.callerName}</h2>
+                        <p style={{ opacity: 0.8 }}>Incoming Call...</p>
                     </div>
-                    <div style={{ display: 'flex', gap: '48px' }}>
-                        <button onClick={declineCall} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', background: 'transparent', color: 'var(--danger)' }}>
-                            <div style={{ background: 'rgba(239, 68, 68, 0.2)', padding: '20px', borderRadius: '50%' }}>
-                                <X size={32} />
-                            </div>
-                            <span>Decline</span>
+                    <div style={{ display: 'flex', gap: '40px' }}>
+                        <button onClick={declineCall} style={{ background: '#ef4444', color: 'white', padding: '20px', borderRadius: '50%', border: 'none' }}>
+                            <X size={32} />
                         </button>
-                        <button onClick={acceptCall} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', background: 'transparent', color: 'var(--success)' }}>
-                            <div style={{ background: 'rgba(34, 197, 94, 0.2)', padding: '20px', borderRadius: '50%' }}>
-                                <Check size={32} />
-                            </div>
-                            <span>Accept</span>
+                        <button onClick={acceptCall} style={{ background: '#22c55e', color: 'white', padding: '20px', borderRadius: '50%', border: 'none' }}>
+                            <Check size={32} />
                         </button>
                     </div>
                 </div>
             )}
 
-            <div className="card animate-fade-in" style={{ textAlign: 'center' }}>
-                <h1 style={{ fontSize: '2.5rem', marginBottom: '8px', background: 'linear-gradient(to right, #6366f1, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                    Chatly
-                </h1>
-                <p style={{ color: 'var(--text-muted)', marginBottom: '32px' }}>
-                    Connect & Play with Friends
+            {/* Main Content Card */}
+            <div className="glass-card animate-fade-in">
+
+                {/* Logo & Brand */}
+                <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} className="animate-float">
+                    <img src="/chatly_logo.png" alt="Chatly" style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
+                    <h1 className="text-gradient" style={{ fontSize: '3rem', fontWeight: 800, margin: 0 }}>Chatly</h1>
+                </div>
+                <p className="text-muted" style={{ marginBottom: '32px' }}>
+                    Social Gaming & Chat
                 </p>
 
-                {user && (
-                    <p style={{ color: 'var(--accent)', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                        Welcome, <b>{user.username}</b>
-                        {user.id?.startsWith('guest-') ? (
-                            <span title="Guest User">❓</span>
-                        ) : (
-                            <span title="Registered User">✅</span>
-                        )}
-                    </p>
+                {error && (
+                    <div style={{ background: '#fef2f2', color: '#ef4444', padding: '12px', borderRadius: '12px', marginBottom: '16px', fontSize: '0.9rem' }}>
+                        {error}
+                    </div>
                 )}
 
-                {/* Friends Section for Registered Users */}
-                {user && !user.id?.startsWith('guest-') && view === 'main' && (
-                    <FriendsComponent />
-                )}
-
+                {/* VIEW: MAIN */}
                 {view === 'main' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '20px' }}>
-                        {error && <p style={{ color: 'var(--danger)', fontSize: '0.875rem' }}>{error}</p>}
+                    <div className="w-full flex-col gap-4">
+                        {user && (
+                            <div style={{ marginBottom: '16px' }}>
+                                <p style={{ fontSize: '1.1rem', color: 'var(--text-main)' }}>
+                                    Hello, <b>{user.username}</b> 👋
+                                </p>
+                            </div>
+                        )}
 
-                        <button className="btn-primary" onClick={() => setView('create')}>
-                            <Plus size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
+                        {/* Friends List Integration */}
+                        {user && !user.id?.startsWith('guest-') && (
+                            <div style={{ marginBottom: '20px' }}>
+                                <FriendsComponent />
+                            </div>
+                        )}
+
+                        <button className="btn-primary" onClick={() => { setView('create'); setError(''); }}>
+                            <Plus size={20} strokeWidth={3} />
                             Create Room
                         </button>
-                        <button className="btn-secondary" onClick={() => setView('join')}>
-                            <Users size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
+
+                        <button className="btn-secondary" onClick={() => { setView('join'); setError(''); }}>
+                            <Users size={20} />
                             Join Room
                         </button>
+
+                        {user && (
+                            <button onClick={logout} className="btn-ghost">
+                                <LogOut size={16} style={{ display: 'inline', marginRight: 6 }} />
+                                Logout
+                            </button>
+                        )}
                     </div>
                 )}
 
+                {/* VIEW: CREATE */}
                 {view === 'create' && (
-                    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Ready to host a game night?</p>
+                    <div className="w-full flex-col gap-4 animate-fade-in">
+                        <div className="mb-4">
+                            <h3 style={{ fontSize: '1.4rem', fontWeight: 700 }}>Create Room</h3>
+                            <p className="text-muted">Start a space for your friends.</p>
+                        </div>
+
                         <button className="btn-primary" onClick={handleCreateRoom}>
-                            Start New Room
+                            Start Instant Room
                         </button>
-                        <button className="btn-secondary" onClick={() => setView('main')} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)' }}>
-                            Back
+
+                        <button className="btn-secondary" onClick={() => { setView('main'); setError(''); }}>
+                            <ArrowLeft size={18} /> Back
                         </button>
                     </div>
                 )}
 
+                {/* VIEW: JOIN */}
                 {view === 'join' && (
-                    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div className="w-full flex-col gap-4 animate-fade-in">
+                        <div className="mb-4">
+                            <h3 style={{ fontSize: '1.4rem', fontWeight: 700 }}>Join Room</h3>
+                            <p className="text-muted">Enter the 6-character code.</p>
+                        </div>
+
                         <input
-                            className="input-field"
-                            placeholder="Enter Room Code"
+                            className="input-pill"
+                            placeholder="CODE"
+                            maxLength={6}
                             value={roomCode}
                             onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                            maxLength={6}
-                            style={{ textAlign: 'center', letterSpacing: '2px', fontSize: '1.2rem', textTransform: 'uppercase' }}
                         />
-                        {error && <p style={{ color: 'var(--danger)', fontSize: '0.875rem' }}>{error}</p>}
+
                         <button className="btn-primary" onClick={handleJoinRoom}>
                             Join Now
                         </button>
-                        <button className="btn-secondary" onClick={() => setView('main')} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)' }}>
-                            Back
+
+                        <button className="btn-secondary" onClick={() => { setView('main'); setError(''); }}>
+                            <ArrowLeft size={18} /> Back
                         </button>
                     </div>
                 )}
+            </div>
 
-                {user && (
-                    <div style={{ marginTop: '24px' }}>
-                        <button onClick={logout} style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.9rem', textDecoration: 'underline' }}>
-                            Logout
-                        </button>
-                    </div>
-                )}
-
+            <div style={{ textAlign: 'center', marginTop: '32px', opacity: 0.5 }}>
+                <p style={{ fontSize: '0.8rem' }}>© 2026 Chatly • Version 1.0</p>
             </div>
         </div>
     );

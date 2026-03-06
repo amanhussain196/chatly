@@ -484,27 +484,56 @@ const Room = () => {
 
     if (error) {
         return (
-            <div className="container" style={{ justifyContent: 'center', alignItems: 'center', flexDirection: 'column', gap: '16px' }}>
-                <h2 style={{ color: 'var(--danger)' }}>Error</h2>
-                <p>{error}</p>
-                <button className="btn-secondary" onClick={() => navigate('/')}>Go Home</button>
+            <div className="app-container">
+                <div className="glass-card">
+                    <h2 style={{ color: '#ef4444', marginBottom: '8px' }}>Error</h2>
+                    <p style={{ marginBottom: '20px' }}>{error}</p>
+                    <button className="btn-secondary" onClick={() => navigate('/')}>Go Home</button>
+                </div>
             </div>
         );
     }
 
     if (!currentUser) return (
-        <div className="container" style={{ justifyContent: 'center', alignItems: 'center', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, background: socket?.connected ? 'green' : 'red', fontSize: '10px', padding: '2px', width: '100%', textAlign: 'center', zIndex: 9999 }}>
-                Socket: {socket?.id} | {socket?.connected ? 'CONNECTED' : 'DISCONNECTED'} | PID: {socket?.io?.engine?.transport?.name}
+        <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center' }}>
+            <div className="glass-card" style={{ width: '100%', padding: '40px' }}>
+                <p style={{ fontWeight: 600, fontSize: '1.1rem' }}>Connecting to Room...</p>
+                <div style={{ marginTop: '16px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Status: {statusDebug}</div>
+                <button className="btn-secondary" style={{ marginTop: '20px' }} onClick={() => window.location.reload()}>Reload</button>
             </div>
-            <p>Loading Room...</p>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status: {statusDebug}</p>
-            <button onClick={() => window.location.reload()} style={{ padding: '8px', marginTop: '10px' }}>Reload</button>
         </div>
     );
 
+    // Room Background Logic
+    const getRoomStyle = (id: string) => {
+        // We use a base white with opacity overlay to show the pattern, or a slight tint
+        const baseStyle = { backgroundColor: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(5px)' };
+
+        if (id?.toLowerCase().startsWith('dm_')) {
+            return { ...baseStyle }; // DM is cleaner
+        }
+        // Generate a subtle tint based on Room ID
+        const hash = id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+        const tints = [
+            'linear-gradient(to bottom, rgba(239, 68, 68, 0.05), rgba(59, 130, 246, 0.05))', // Red-Blue mix
+            'linear-gradient(to bottom, rgba(59, 130, 246, 0.08), rgba(255,255,255,0))', // Blue fade
+            'linear-gradient(to bottom, rgba(239, 68, 68, 0.08), rgba(255,255,255,0))', // Red fade
+        ];
+        return { ...baseStyle, backgroundImage: tints[hash % tints.length] };
+    };
+
     return (
-        <div className="container" style={{ height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        <div style={{
+            height: '100dvh',
+            width: '100%',
+            maxWidth: '480px',
+            margin: '0 auto',
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'relative',
+            boxShadow: '0 0 50px rgba(0,0,0,0.1)',
+            ...getRoomStyle(roomId || '')
+        }}>
 
             {/* Calling Overlay (Outgoing) */}
             {callStatus === 'calling' && (
@@ -982,25 +1011,13 @@ const Room = () => {
 
             {/* Audio Elements for WebRTC Peers */}
             {peers.map((peer) => (
-                <AudioPlayer key={peer.peerID} stream={peer.stream} />
+                <Audio key={peer.peerID} stream={peer.stream} />
             ))}
 
         </div >
     );
 };
 
-// Audio Player Component
-const AudioPlayer: React.FC<{ stream: MediaStream | null }> = ({ stream }) => {
-    const audioRef = React.useRef<HTMLAudioElement>(null);
 
-    React.useEffect(() => {
-        if (audioRef.current && stream) {
-            audioRef.current.srcObject = stream;
-            audioRef.current.play().catch(err => console.error('Audio play error:', err));
-        }
-    }, [stream]);
-
-    return <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />;
-};
 
 export default Room;

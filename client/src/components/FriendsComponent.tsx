@@ -148,22 +148,40 @@ const FriendsComponent = () => {
 
 
     return (
-        <div className="card" style={{ padding: '20px', marginTop: '20px' }}>
-            {/* ... Header ... */}
+        <div style={{ marginTop: '24px' }}>
+            {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h2 style={{ fontSize: '1.2rem' }}>Friends</h2>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-main)' }}>Friends</h2>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <button
                         onClick={() => setView('list')}
-                        style={{ padding: '8px', background: view === 'list' ? 'var(--primary)' : 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', color: 'white', cursor: 'pointer' }}
+                        style={{
+                            padding: '8px 12px',
+                            background: view === 'list' ? 'var(--primary-gradient)' : 'rgba(0,0,0,0.05)',
+                            border: 'none',
+                            borderRadius: '20px',
+                            color: view === 'list' ? 'white' : 'var(--text-muted)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            fontSize: '0.9rem',
+                            transition: 'all 0.2s'
+                        }}
                     >
                         My Friends
                     </button>
                     <button
                         onClick={() => setView('add')}
-                        style={{ padding: '8px', background: view === 'add' ? 'var(--primary)' : 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', color: 'white', cursor: 'pointer' }}
+                        style={{
+                            padding: '8px 12px',
+                            background: view === 'add' ? 'var(--primary-gradient)' : 'rgba(0,0,0,0.05)',
+                            border: 'none',
+                            borderRadius: '20px',
+                            color: view === 'add' ? 'white' : 'var(--text-muted)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
                     >
-                        <UserPlus size={16} />
+                        <UserPlus size={18} />
                     </button>
                 </div>
             </div>
@@ -172,13 +190,14 @@ const FriendsComponent = () => {
                 <div className="animate-fade-in">
                     <form onSubmit={sendRequest} style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
                         <input
+                            className="input-pill"
                             value={addUsername}
                             onChange={e => setAddUsername(e.target.value)}
-                            placeholder="Enter username to add..."
-                            style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #333', background: '#1e293b', color: 'white' }}
+                            placeholder="Username..."
+                            style={{ flex: 1, padding: '10px 16px', textAlign: 'left', fontSize: '0.9rem' }}
                         />
-                        <button type="submit" disabled={loading || !addUsername} style={{ padding: '10px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-                            Send
+                        <button type="submit" disabled={loading || !addUsername} className="btn-primary" style={{ width: 'auto', padding: '10px 20px', borderRadius: '20px' }}>
+                            Add
                         </button>
                     </form>
                     {msg.text && (
@@ -194,22 +213,22 @@ const FriendsComponent = () => {
                     {/* Requests Section */}
                     {requests.length > 0 && (
                         <div style={{ marginBottom: '24px' }}>
-                            <h3 style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Pending Requests</h3>
+                            <h3 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>Pending Requests</h3>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 {requests.map(req => (
-                                    <div key={req._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <div style={{ width: '32px', height: '32px', background: '#334155', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                <User size={16} />
+                                    <div key={req._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '16px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <div style={{ width: '36px', height: '36px', background: '#f1f5f9', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                                                <User size={18} />
                                             </div>
                                             <span>{req.username}</span>
                                         </div>
                                         <div style={{ display: 'flex', gap: '8px' }}>
-                                            <button onClick={() => acceptRequest(req._id)} style={{ padding: '6px', background: '#22c55e', border: 'none', borderRadius: '50%', color: 'white', cursor: 'pointer', display: 'flex' }} title="Accept">
-                                                <Check size={16} />
+                                            <button onClick={() => acceptRequest(req._id)} style={{ padding: '8px', background: '#22c55e', border: 'none', borderRadius: '50%', color: 'white', cursor: 'pointer', display: 'flex', boxShadow: '0 2px 5px rgba(34, 197, 94, 0.3)' }} title="Accept">
+                                                <Check size={16} strokeWidth={3} />
                                             </button>
-                                            <button onClick={() => declineRequest(req._id)} style={{ padding: '6px', background: '#ef4444', border: 'none', borderRadius: '50%', color: 'white', cursor: 'pointer', display: 'flex' }} title="Decline">
-                                                <X size={16} />
+                                            <button onClick={() => declineRequest(req._id)} style={{ padding: '8px', background: '#ef4444', border: 'none', borderRadius: '50%', color: 'white', cursor: 'pointer', display: 'flex', boxShadow: '0 2px 5px rgba(239, 68, 68, 0.3)' }} title="Decline">
+                                                <X size={16} strokeWidth={3} />
                                             </button>
                                         </div>
                                     </div>
@@ -220,37 +239,45 @@ const FriendsComponent = () => {
 
                     {/* Friends List */}
                     <div>
-                        <h3 style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Your Friends ({friends.length})</h3>
+                        <h3 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>Your Friends ({friends.length})</h3>
                         {friends.length === 0 ? (
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>No friends yet. Add someone!</p>
+                            <div style={{ padding: '24px', textAlign: 'center', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No friends yet.</p>
+                                <button onClick={() => setView('add')} style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 700, marginTop: '8px', cursor: 'pointer' }}>
+                                    Find Friends
+                                </button>
+                            </div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 {friends.map(friend => (
-                                    <div key={friend._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
-                                            <div style={{ width: '32px', height: '32px', background: '#4f46e5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                <span style={{ fontWeight: 'bold' }}>{friend.username.charAt(0).toUpperCase()}</span>
+                                    <div key={friend._id} onClick={() => startChat(friend._id, friend.username)} style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                        padding: '12px', background: 'white', borderRadius: '16px',
+                                        cursor: 'pointer', border: '1px solid transparent',
+                                        transition: 'all 0.2s',
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
+                                    }}
+                                        onMouseEnter={(e) => e.currentTarget.style.borderColor = '#3b82f6'}
+                                        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative' }}>
+                                            <div style={{ width: '40px', height: '40px', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 2px 5px rgba(59, 130, 246, 0.3)' }}>
+                                                <span style={{ fontWeight: '800', fontSize: '1rem' }}>{friend.username.charAt(0).toUpperCase()}</span>
                                             </div>
                                             <span>{friend.username}</span>
                                             {/* Unread Dot */}
                                             {hasUnread(friend._id) && (
                                                 <div style={{
-                                                    width: '10px', height: '10px',
-                                                    background: 'var(--danger)', borderRadius: '50%',
-                                                    position: 'absolute', top: 0, left: 0,
-                                                    border: '2px solid var(--bg-card)'
+                                                    width: '12px', height: '12px',
+                                                    background: '#ef4444', borderRadius: '50%',
+                                                    position: 'absolute', top: -2, left: -2,
+                                                    border: '2px solid white'
                                                 }} />
                                             )}
                                         </div>
-                                        <button onClick={() => startChat(friend._id, friend.username)} style={{ padding: '8px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', color: 'var(--primary)', cursor: 'pointer', position: 'relative' }} title="Message">
-                                            <MessageSquare size={18} />
-                                            {hasUnread(friend._id) && (
-                                                <span style={{
-                                                    position: 'absolute', top: -5, right: -5,
-                                                    width: '8px', height: '8px', background: 'var(--danger)', borderRadius: '50%'
-                                                }} />
-                                            )}
-                                        </button>
+                                        <div style={{ color: '#94a3b8' }}>
+                                            <MessageSquare size={18} color={hasUnread(friend._id) ? '#ef4444' : '#94a3b8'} />
+                                        </div>
                                     </div>
                                 ))}
                             </div>
